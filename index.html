@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "24";
+var APP_V = "25";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -927,7 +927,7 @@ html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
 <body>
 <div class="app">
   <aside class="side">
-    <a class="brand" href="./" target="_blank" rel="noopener" title="Открыть «Быстродел» в новой вкладке" aria-label="Быстродел — открыть в новой вкладке"><svg class="mark" viewBox="330 250 620 700" aria-hidden="true"><path d="M455 282 H735 C820 282 880 345 880 425 C880 505 822 568 760 568 H603 Q592 568 594 557 L645 352 L445 600 H543 Q556 600 551 612 L430 870 L546 757 Q551 752 560 752 H735 C750 752 762 739 762 722 C762 705 750 692 735 692 H612 Q598 692 606 683 L688 603 Q693 598 702 598 H795 C868 598 920 660 920 745 C920 842 842 920 730 920 H388 Q372 920 376 904 L433 690 H378 Q358 690 362 671 L436 297 Q439 282 455 282 Z" fill="currentColor" stroke="currentColor" stroke-width="10" stroke-linejoin="round"/></svg><b>Быстродел</b></a>
+    <a class="brand" href="./" title="Обновить «Быстродел»" aria-label="Быстродел — обновить"><svg class="mark" viewBox="330 250 620 700" aria-hidden="true"><path d="M455 282 H735 C820 282 880 345 880 425 C880 505 822 568 760 568 H603 Q592 568 594 557 L645 352 L445 600 H543 Q556 600 551 612 L430 870 L546 757 Q551 752 560 752 H735 C750 752 762 739 762 722 C762 705 750 692 735 692 H612 Q598 692 606 683 L688 603 Q693 598 702 598 H795 C868 598 920 660 920 745 C920 842 842 920 730 920 H388 Q372 920 376 904 L433 690 H378 Q358 690 362 671 L436 297 Q439 282 455 282 Z" fill="currentColor" stroke="currentColor" stroke-width="10" stroke-linejoin="round"/></svg><b>Быстродел</b></a>
     <nav class="nav" id="nav"></nav>
     <div class="cal" id="sideCal"></div>
     <div class="side-foot">
