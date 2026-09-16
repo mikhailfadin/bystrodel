@@ -106,7 +106,10 @@ def parse(path):
     if block:
         for m in re.finditer(r"^- \[( |x|X)\]\s*(.+)$", block.group(1), re.M):
             steps.append({"t": m.group(2).strip(), "done": m.group(1).lower() == "x", "basket": False})
-    excerpt = " ".join(re.sub(r"^##.*$", "", body, flags=re.M).split())[:300]
+    text_only = re.sub(r"^##\s*Шаги\s*$.*?(?=^##\s|\Z)", "", body, flags=re.M | re.S)
+    text_only = re.sub(r"^#+\s*$", "", text_only, flags=re.M)
+    lines = [" ".join(line.split()) for line in text_only.split("\n")]
+    excerpt = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()[:1500]
     return meta, steps, excerpt
 
 
@@ -152,7 +155,8 @@ def push(token):
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     seen, changed = {}, []
     for row in rows():
-        stamp = hashlib.sha1(json.dumps(row, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
+        same = {k: v for k, v in row.items() if k != "updated_at"}
+        stamp = hashlib.sha1(json.dumps(same, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
         seen[row["id"]] = stamp
         if state.get("notes", {}).get(row["id"]) != stamp:
             changed.append(row)
@@ -207,6 +211,12 @@ def apply(token):
         try:
             if not note:
                 raise RuntimeError("заметка не найдена")
+            if change["op"] == "basket":            # корзина живёт только в облаке, файл не трогаем
+                api("PATCH", f"bd_notes?id=eq.{change['note_id']}",
+                    {"basket": bool(change["value"]["basket"]), "basket_day": date.today().isoformat()}, token)
+                api("PATCH", f"bd_changes?id=eq.{change['id']}", result, token)
+                done += 1
+                continue
             path = VAULT / note[0]["path"]
             if not path.exists():
                 raise RuntimeError("файла нет на диске")
@@ -226,15 +236,14 @@ def apply(token):
                 text = set_meta(text, "подходы", int(value.get("starts", 0)))
             elif op == "step":
                 text = set_step(text, int(value["index"]), bool(value["done"]))
-            elif op == "basket":
-                api("PATCH", f"bd_notes?id=eq.{change['note_id']}",
-                    {"basket": bool(value["basket"]), "basket_day": date.today().isoformat()}, token)
             else:
                 raise RuntimeError(f"неизвестная правка {op}")
-            if op != "basket":
-                path.write_text(text, encoding="utf-8")
-                mine[change["note_id"]] = path.stat().st_mtime
+            path.write_text(text, encoding="utf-8")
+            mine[change["note_id"]] = path.stat().st_mtime
             done += 1
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+            log("нет связи, правка подождёт:", str(exc)[:120])
+            continue
         except Exception as exc:
             result["error"] = str(exc)[:200]
             log("правка не применилась:", result["error"])
