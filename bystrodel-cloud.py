@@ -30,6 +30,40 @@ ZONE = VAULT / "Claude"
 
 # какие папки показываем в приложении и какой тип ставим, если строк нет
 TRASH = VAULT / "Claude" / "Корзина"
+BOARD = VAULT / "Kanban задач" / "Kanban задач.md"
+DONE_COLUMN = {"сделано": "## ✅ Готово", "изучено": "## 📚 Полезные статьи"}
+
+
+def board_move(name, column):
+    """Двигаем карточку заметки по доске: в колонку с галочкой или прочь (column=None).
+    Карточки нет — доску не трогаем: новые карточки ставит бот, а не мост."""
+    if not BOARD.exists():
+        return False
+    text = BOARD.read_text(encoding="utf-8")
+    marks = (f"[[{name}|", f"[[{name}]]")
+    card, rows = None, []
+    for line in text.split("\n"):
+        if line.lstrip().startswith("- [") and any(m in line for m in marks):
+            card = card or line.strip()
+            continue
+        rows.append(line)
+    if card is None:
+        return False
+    if column:
+        card = re.sub(r"^- \[ \]", "- [x]", card)
+        for i, line in enumerate(rows):
+            if line.strip() == column:
+                at = i + 1 + (1 if i + 1 < len(rows) and not rows[i + 1].strip() else 0)
+                rows.insert(at, card)
+                break
+        else:
+            return False
+    new = re.sub(r"\n{3,}", "\n\n", "\n".join(rows))
+    if new != text:
+        BOARD.write_text(new, encoding="utf-8")
+        log("доска:", name, "→", column or "убрана")
+    return True
+
 FOLDERS = {
     "Бизнес/Задачи на внедрение": "задача",
     "Бизнес/Идеи по бизнесу": "идея",
@@ -235,6 +269,7 @@ def apply(token):
                     target = TRASH / inner.parent / f"{inner.stem} ({n}){inner.suffix}"
                     n += 1
                 path.rename(target)
+                board_move(rel.stem, None)
                 trashed.add(change["note_id"])
                 log("в корзину:", note[0]["path"], "→", str(target.relative_to(VAULT)))
                 api("PATCH", f"bd_changes?id=eq.{change['id']}", result, token)
@@ -260,6 +295,8 @@ def apply(token):
                 raise RuntimeError(f"неизвестная правка {op}")
             path.write_text(text, encoding="utf-8")
             mine[change["note_id"]] = path.stat().st_mtime
+            if op == "status" and value.get("status") in DONE_COLUMN:
+                board_move(path.stem, DONE_COLUMN[value["status"]])
             done += 1
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             log("нет связи, правка подождёт:", str(exc)[:120])
