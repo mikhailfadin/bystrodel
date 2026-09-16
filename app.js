@@ -268,8 +268,12 @@ function wire() {
   };
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
   $("search").oninput = drawAll;
-  $("critBtn").onclick = () => overlay("crit");
-  $("critBack").onclick = () => setTab("work");
+  $("critBtn").onclick = () => {
+    // тот же значок закрывает настройки — возвращаемся туда, где были
+    if ($("v-crit").hidden) { st.back = st.tab; overlay("crit"); }
+    else setTab(st.back || "work");
+  };
+  $("critBack").onclick = () => setTab(st.back || "work");
   $("sheet").onclick = e => { if (e.target === $("sheet")) $("sheet").hidden = true; };
   $("sheetClose").onclick = () => $("sheet").hidden = true;
   $("demoBtn")?.remove();
