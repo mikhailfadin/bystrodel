@@ -1,0 +1,64 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Проверка связи</title>
+<style>
+  body{margin:0;padding:24px;font:17px/1.5 -apple-system,system-ui,sans-serif;background:#F7F5FB;color:#1B1523}
+  h1{font-size:22px;margin:0 0 4px}
+  p.sub{margin:0 0 20px;color:#6b6478;font-size:15px}
+  .row{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start}
+  .dot{width:22px;flex:none;font-size:20px;line-height:1.2}
+  .name{font-weight:600}
+  .note{color:#6b6478;font-size:14px}
+  .total{margin-top:18px;padding:16px;border-radius:14px;background:#fff;font-weight:600}
+  @media (prefers-color-scheme: dark){
+    body{background:#1C1526;color:#fff}.row,.total{background:#2A2236}.note,p.sub{color:#b3aac4}
+  }
+</style>
+<h1>Проверка связи</h1>
+<p class="sub">Выключи VPN и обнови страницу.</p>
+<div id="list"></div>
+<div class="total" id="total">Проверяю…</div>
+<script>
+const targets = [
+  {name:'Сайт приложения', note:'GitHub Pages', url:'https://mikhailfadin.github.io/bystrodel/version.json'},
+  {name:'Облако с делами', note:'Supabase — здесь лежат заметки', url:'https://yqumtlykftuxswbhnfru.supabase.co/rest/v1/', ok:[200,401,404]},
+  {name:'Вход в аккаунт', note:'Supabase Auth', url:'https://yqumtlykftuxswbhnfru.supabase.co/auth/v1/health', ok:[200,401,404]}
+];
+const list = document.getElementById('list');
+const rows = targets.map(t => {
+  const el = document.createElement('div');
+  el.className = 'row';
+  el.innerHTML = '<div class="dot">⏳</div><div><div class="name"></div><div class="note"></div></div>';
+  el.querySelector('.name').textContent = t.name;
+  el.querySelector('.note').textContent = t.note;
+  list.appendChild(el);
+  return el;
+});
+async function probe(t, el){
+  const started = Date.now();
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), 12000);
+  try {
+    const r = await fetch(t.url + '?t=' + started, {signal: stop.signal, cache:'no-store'});
+    clearTimeout(timer);
+    const ms = Date.now() - started;
+    const good = (t.ok || [200]).includes(r.status);
+    el.querySelector('.dot').textContent = good ? '✅' : '⚠️';
+    el.querySelector('.note').textContent = (good ? 'работает' : 'ответ ' + r.status) + ' · ' + ms + ' мс';
+    return good;
+  } catch (e) {
+    clearTimeout(timer);
+    el.querySelector('.dot').textContent = '❌';
+    el.querySelector('.note').textContent = Date.now() - started > 11000 ? 'не отвечает (таймаут)' : 'не открывается';
+    return false;
+  }
+}
+Promise.all(targets.map((t,i) => probe(t, rows[i]))).then(res => {
+  const total = document.getElementById('total');
+  const bad = res.filter(x => !x).length;
+  total.textContent = bad === 0 ? '✅ Всё работает без VPN'
+    : bad === res.length ? '❌ Ничего не открывается — нужен VPN'
+    : '⚠️ Часть не открывается — VPN нужен для облака';
+});
+</script>
