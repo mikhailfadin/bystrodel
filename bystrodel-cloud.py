@@ -29,6 +29,7 @@ VAULT = Path.home() / "Library/Mobile Documents/iCloud~md~obsidian/Documents/Obs
 ZONE = VAULT / "Claude"
 
 # какие папки показываем в приложении и какой тип ставим, если строк нет
+TRASH = VAULT / "Claude" / "Корзина"
 FOLDERS = {
     "Бизнес/Задачи на внедрение": "задача",
     "Бизнес/Идеи по бизнесу": "идея",
@@ -164,7 +165,9 @@ def push(token):
     gone = [i for i in known if i not in seen]
     # Защита: пропали все заметки или больше половины — это не удаление,
     # а сбой доступа к хранилищу. Ничего не стираем, поднимаем тревогу.
-    if known and (not seen or len(gone) > len(known) / 2):
+    trashed = set(state.get("trashed", []))
+    lost = [i for i in gone if i not in trashed]
+    if known and (not seen or len(lost) > len(known) / 2):
         HEALTH.write_text(json.dumps({"err": f"хранилище отдало {len(seen)} заметок вместо {len(known)} — облако не трогаю",
                                       "err_at": int(time.time())}, ensure_ascii=False))
         log(f"стоп: видно {len(seen)} заметок вместо {len(known)}")
@@ -174,6 +177,7 @@ def push(token):
     for note_id in gone:                      # заметку удалили или переименовали
         api("PATCH", f"bd_notes?id=eq.{note_id}", {"deleted": True}, token)
     state["notes"] = seen
+    state["trashed"] = sorted(trashed - set(gone))
     STATE.write_text(json.dumps(state, ensure_ascii=False))
     return len(changed), len(gone)
 
@@ -204,6 +208,7 @@ def apply(token):
     pending = api("GET", "bd_changes?applied_at=is.null&order=created_at&limit=50", token=token)
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     mine = state.get("written", {})          # что мост писал сам — это не чужое вмешательство
+    trashed = set(state.get("trashed", []))  # удалено из приложения — не сбой доступа
     done = 0
     for change in pending:
         note = api("GET", f"bd_notes?id=eq.{change['note_id']}&select=path", token=token)
@@ -220,6 +225,21 @@ def apply(token):
             path = VAULT / note[0]["path"]
             if not path.exists():
                 raise RuntimeError("файла нет на диске")
+            if change["op"] == "trash":             # не стираем: переносим в «Claude/Корзина», путь сохраняем
+                rel = Path(note[0]["path"])
+                inner = rel.relative_to("Claude") if rel.parts[0] == "Claude" else rel
+                target = TRASH / inner
+                target.parent.mkdir(parents=True, exist_ok=True)
+                n = 2
+                while target.exists():
+                    target = TRASH / inner.parent / f"{inner.stem} ({n}){inner.suffix}"
+                    n += 1
+                path.rename(target)
+                trashed.add(change["note_id"])
+                log("в корзину:", note[0]["path"], "→", str(target.relative_to(VAULT)))
+                api("PATCH", f"bd_changes?id=eq.{change['id']}", result, token)
+                done += 1
+                continue
             made = datetime.fromisoformat(change["created_at"].split("+")[0][:19])
             edge = max(made.replace(tzinfo=timezone.utc).timestamp(), mine.get(change["note_id"], 0))
             if path.stat().st_mtime > edge + 2:
@@ -249,6 +269,7 @@ def apply(token):
             log("правка не применилась:", result["error"])
         api("PATCH", f"bd_changes?id=eq.{change['id']}", result, token)
     state["written"] = mine
+    state["trashed"] = sorted(trashed)
     STATE.write_text(json.dumps(state, ensure_ascii=False))
     return done, len(pending) - done
 
