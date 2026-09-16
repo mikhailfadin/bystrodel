@@ -232,6 +232,20 @@ async function credit() {
     await rest("bd_settings", { method: "POST", body: [{ streak: settings.streak, streak_day: settings.streak_day }], prefer: "resolution=merge-duplicates" }).catch(() => { });
   }
 }
+/* ---------- тема ---------- */
+const THEMES = ["auto", "light", "dark"];
+function applyTheme() {
+  const mode = localStorage.getItem("bd-theme") || "auto";
+  const root = document.documentElement;
+  if (mode === "auto") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", mode);
+  const dark = mode === "dark" || (mode === "auto" && (TG?.colorScheme === "dark" || matchMedia("(prefers-color-scheme: dark)").matches));
+  const btn = $("themeBtn");
+  if (btn) { btn.textContent = mode === "auto" ? "A" : (dark ? "☾" : "☀︎"); btn.title = { auto: "Тема как в системе", light: "Светлая тема", dark: "Тёмная тема" }[mode]; }
+  const bg = getComputedStyle(root).getPropertyValue("--screen").trim();
+  TG?.setBackgroundColor?.(bg); TG?.setHeaderColor?.(bg);
+}
+
 /* ---------- запуск ---------- */
 function wire() {
   document.querySelectorAll("#tabbar button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
@@ -247,6 +261,12 @@ function wire() {
     draw(); toast(pick.length ? "Агент положил быстрые дела" : "Быстрых дел нет — загляни во «Всё»");
   };
   $("goWork").onclick = () => setTab("work");
+  $("themeBtn").onclick = () => {
+    const now = localStorage.getItem("bd-theme") || "auto";
+    localStorage.setItem("bd-theme", THEMES[(THEMES.indexOf(now) + 1) % THEMES.length]);
+    applyTheme(); buzz();
+  };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
   $("search").oninput = drawAll;
   $("critBtn").onclick = () => overlay("crit");
   $("critBack").onclick = () => setTab("work");
@@ -298,6 +318,7 @@ function wire() {
 }
 (async () => {
   TG?.ready?.(); TG?.expand?.();
+  applyTheme();
   wire();
   const ok = await restore().catch(() => false);
   if (!ok) { $("screen").hidden = true; $("gate").hidden = false; return; }

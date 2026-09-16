@@ -156,7 +156,15 @@ def push(token):
         seen[row["id"]] = stamp
         if state.get("notes", {}).get(row["id"]) != stamp:
             changed.append(row)
-    gone = [i for i in state.get("notes", {}) if i not in seen]
+    known = state.get("notes", {})
+    gone = [i for i in known if i not in seen]
+    # Защита: пропали все заметки или больше половины — это не удаление,
+    # а сбой доступа к хранилищу. Ничего не стираем, поднимаем тревогу.
+    if known and (not seen or len(gone) > len(known) / 2):
+        HEALTH.write_text(json.dumps({"err": f"хранилище отдало {len(seen)} заметок вместо {len(known)} — облако не трогаю",
+                                      "err_at": int(time.time())}, ensure_ascii=False))
+        log(f"стоп: видно {len(seen)} заметок вместо {len(known)}")
+        return 0, 0
     if changed:
         api("POST", "bd_notes", changed, token, prefer="resolution=merge-duplicates")
     for note_id in gone:                      # заметку удалили или переименовали
@@ -250,7 +258,7 @@ def once():
     applied, failed = apply(token)
     clear_basket(token)
     HEALTH.write_text(json.dumps({"ok_at": int(time.time()), "sent": sent,
-                                  "gone": gone, "applied": applied, "failed": failed}))
+                                  "gone": gone, "applied": applied, "failed": failed, "seen": len(json.loads(STATE.read_text()).get("notes", {})) if STATE.exists() else 0}))
     return sent, gone, applied, failed
 
 
@@ -261,7 +269,7 @@ def main():
     while True:
         try:
             sent, gone, applied, failed = once()
-            if sent or applied or failed:
+            if sent or gone or applied or failed:
                 log(f"выгружено {sent}, скрыто {gone}, применено {applied}, с ошибкой {failed}")
         except Exception as exc:
             log("сбой:", str(exc)[:200])
