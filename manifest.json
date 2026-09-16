@@ -1,1 +1,23 @@
-{"name":"Быстродел","short_name":"Быстродел","start_url":".","display":"standalone","background_color":"#141A17","theme_color":"#141A17"}
+{
+  "name": "Быстродел",
+  "short_name": "Быстродел",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0B0E0C",
+  "theme_color": "#0B0E0C",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
