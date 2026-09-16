@@ -286,6 +286,9 @@ def once():
     token = session()
     sent, gone = push(token)
     applied, failed = apply(token)
+    if applied:                               # записали в заметки — сразу отдаём облаку, не ждём круга
+        more, more_gone = push(token)
+        sent, gone = sent + more, gone + more_gone
     clear_basket(token)
     HEALTH.write_text(json.dumps({"ok_at": int(time.time()), "sent": sent,
                                   "gone": gone, "applied": applied, "failed": failed, "seen": len(json.loads(STATE.read_text()).get("notes", {})) if STATE.exists() else 0}))
