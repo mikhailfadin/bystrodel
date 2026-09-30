@@ -366,7 +366,7 @@ function qItemPlain(n, { cls = "", meta = "" } = {}) {
   const open = Q.open[n.id];
   const pick = stepBasket
     ? `<span class="q-pick static">шаг в работе</span>`
-    : n.status === "изучено" ? `<span class="q-pick static studied">изучено</span>`
+    : n.status === "изучено" ? `<button class="q-pick static studied" data-q-undone="${n.id}" title="Нажми, чтобы вернуть в хранилище">изучено</button>`
     : `<button class="q-pick" data-q-toggle="${n.id}">${n.basket ? "В работе" : "В работу"}</button>`;
   const canStudy = qStudy(n) && n.status !== "изучено";
   return `<div class="q-row${inB ? " picked" : ""}${open ? " open" : ""}${cls ? " " + cls : ""}">

@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "28";
+var APP_V = "29";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -757,6 +757,8 @@ html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .q-done-bar .q-t b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
 .q-done-bar .q-t span{white-space:normal}
 .q-pick.static.studied{color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);opacity:1}
+button.q-pick.studied{cursor:pointer}
+button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
 .q-mins{display:flex;flex-direction:column;align-items:stretch;gap:3px;width:58px}
 .q-mins button{height:24px;border-radius:8px;font:600 14px/24px var(--mono);color:var(--dim);background:var(--accent-soft)}
 .q-mins button:hover{color:var(--accent)}
@@ -2086,6 +2088,6 @@ render();
 paintFbar();
 if (typeof initCloud === "function") initCloud();
 </script>
-<script src="quick.js?v=15"></script>
+<script src="quick.js?v=16"></script>
 </body>
 </html>
