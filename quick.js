@@ -3,7 +3,7 @@
 
 const Q = {
   notes: [], settings: null, loaded: false, loading: false, error: "", at: null,
-  tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null, steps: null,
+  tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null, steps: null, rename: null,
 };
 const Q_ORDER = ["Новые", "Быстрые", "Актуальное", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
 const Q_FOLDERS = ["Бизнес/Задачи на внедрение", "Бизнес/Идеи по бизнесу", "Бизнес/Гипотезы проектов", "Бизнес/Разобрать", "Цели (Бизнес)", "Не забыть", "WIKI (База)/Полезные материалы", "WIKI (База)/Изучить информацию", "Контент/Идеи", "Контент/Сценарии"];
@@ -258,6 +258,16 @@ function qDetail(n) {
       </div>
     </div>`;
   }
+  if (Q.rename && Q.rename.id === n.id) {
+    return `<div class="q-detail">
+      <input class="q-rename-edit" value="${qe(Q.rename.text)}">
+      <div class="q-hint">Файл в Obsidian переименуется вместе с заметкой</div>
+      <div class="q-detail-acts">
+        <button class="q-soft sm" data-q-rename-save>Сохранить</button>
+        <button class="q-soft sm" data-q-rename-cancel>Отмена</button>
+      </div>
+    </div>`;
+  }
   const steps = n.steps || [];
   const text = (n.excerpt || "").trim();
   const long = text.length >= 1490;
@@ -271,6 +281,7 @@ function qDetail(n) {
       <span class="q-acts-left">
         <a class="q-link" href="${qObsidian(n)}">Открыть в Obsidian ${QI.out}</a>
         <button class="q-link" data-q-steps="${n.id}">${steps.length ? "Править чек-лист" : "Сделать чек-лист"}</button>
+        <button class="q-link" data-q-rename="${n.id}">Переименовать</button>
       </span>
       <span class="q-move-wrap"><small>Папка:</small><select class="q-move" data-q-move="${n.id}">${(n.folder && !Q_FOLDERS.includes(n.folder) ? [n.folder, ...Q_FOLDERS] : Q_FOLDERS).map(f => `<option value="${qe(f)}"${f === n.folder ? " selected" : ""}>${qe(f.replace(/\//g, " → "))}</option>`).join("")}</select></span>
     </div>
@@ -283,6 +294,14 @@ function qSetSteps(note, lines) {
   qChange(note, "steps", { items });
   Q.steps = null; render();
   toast(items.length ? `Чек-лист: ${items.length} ${qPlural(items.length, "шаг", "шага", "шагов")}` : "Чек-лист убран");
+}
+function qRename(note, title) {
+  title = String(title || "").trim().replace(/[\\/:*?"<>|]/g, "").slice(0, 120);
+  if (!title || title === note.title) { Q.rename = null; return render(); }
+  note.title = title;
+  qChange(note, "rename", { title });
+  Q.rename = null; render();
+  toast(`Название изменено: ${title}`);
 }
 function qItemBasket(e) {
   const open = Q.open["b:" + e.key];
@@ -604,6 +623,17 @@ $("board").addEventListener("click", e => {
     const ta = document.querySelector(".q-steps-edit");
     return qSetSteps(note, (ta ? ta.value : "").split("\n"));
   }
+  if (d.qRename) {
+    const n = Q.notes.find(x => x.id === d.qRename); if (!n) return;
+    Q.rename = { id: n.id, text: n.title };
+    return render();
+  }
+  if (d.qRenameCancel !== undefined) { Q.rename = null; return render(); }
+  if (d.qRenameSave !== undefined) {
+    const note = Q.notes.find(x => x.id === (Q.rename || {}).id); if (!note) return;
+    const inp = document.querySelector(".q-rename-edit");
+    return qRename(note, inp ? inp.value : "");
+  }
   if (d.qSuggest !== undefined) {
     const pick = Q.notes.filter(n => n.quick && n.status !== "сделано" && !n.basket && !(n.steps || []).length).slice(0, 3);
     pick.forEach(n => { n.basket = true; n.basket_day = qDay(); qChange(n, "basket", { basket: true }); });
@@ -615,8 +645,15 @@ $("board").addEventListener("click", e => {
 });
 $("board").addEventListener("input", e => {
   if (e.target.classList.contains("q-steps-edit")) { if (Q.steps) Q.steps.text = e.target.value; return; }
+  if (e.target.classList.contains("q-rename-edit")) { if (Q.rename) Q.rename.text = e.target.value; return; }
   if (e.target.id !== "qSearch") return;
   Q.q = e.target.value; render();
+});
+$("board").addEventListener("keydown", e => {
+  if (e.key !== "Enter" || !e.target.classList.contains("q-rename-edit")) return;
+  e.preventDefault();
+  const note = Q.notes.find(x => x.id === (Q.rename || {}).id); if (!note) return;
+  qRename(note, e.target.value);
 });
 $("board").addEventListener("change", e => {
   if (e.target.dataset.qMove === undefined) return;

@@ -35,6 +35,18 @@ DONE_COLUMN = {"сделано": "## ✅ Готово", "изучено": "## �
 BACK_COLUMN = "## 🆕 Новые"
 
 
+def board_rename(old, new):
+    """Карточка на доске ссылается на заметку по имени — правим ссылку при переименовании."""
+    if not BOARD.exists():
+        return False
+    text = BOARD.read_text(encoding="utf-8")
+    fixed = text.replace(f"[[{old}|", f"[[{new}|").replace(f"[[{old}]]", f"[[{new}]]")
+    if fixed != text:
+        BOARD.write_text(fixed, encoding="utf-8")
+        log("доска: ссылка", old, "→", new)
+    return True
+
+
 def board_move(name, column, done=True):
     """Двигаем карточку заметки по доске: в колонку с галочкой или прочь (column=None).
     Карточки нет — доску не трогаем: новые карточки ставит бот, а не мост."""
@@ -308,6 +320,29 @@ def apply(token):
             path = VAULT / note[0]["path"]
             if not path.exists():
                 raise RuntimeError("файла нет на диске")
+            if change["op"] == "rename":            # у заметки новое название — переименовываем файл
+                title = re.sub(r'[\\/:*?"<>|]', "", str(change["value"]["title"])).strip()[:120]
+                rel = Path(note[0]["path"])
+                if not title:
+                    raise RuntimeError("пустое название")
+                target = path.with_name(title + ".md")
+                if target != path:
+                    if target.exists():
+                        raise RuntimeError("заметка с таким названием уже есть")
+                    path.rename(target)
+                    new_rel = str(target.relative_to(VAULT))
+                    new_id = hashlib.sha1(new_rel.encode()).hexdigest()[:20]
+                    board_rename(rel.stem, title)
+                    api("PATCH", f"bd_notes?id=eq.{change['note_id']}", {"deleted": True}, token)
+                    trashed.add(change["note_id"])
+                    state.get("notes", {}).pop(change["note_id"], None)
+                    mine.pop(change["note_id"], None)
+                    if note[0].get("basket"):
+                        state.setdefault("basket_after_move", {})[new_id] = True
+                    log("переименовал:", note[0]["path"], "→", new_rel)
+                api("PATCH", f"bd_changes?id=eq.{change['id']}", result, token)
+                done += 1
+                continue
             if change["op"] == "move":              # заметка переезжает в другую папку хранилища
                 folder = str(change["value"]["folder"])
                 if folder not in FOLDERS:
