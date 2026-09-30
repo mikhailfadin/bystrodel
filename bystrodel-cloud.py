@@ -152,11 +152,14 @@ def parse(path):
 def created_at(path, meta):
     """Когда заметка появилась: шапка «создано» или время создания файла — что раньше."""
     st = path.stat()
-    stamps = [getattr(st, "st_birthtime", st.st_mtime)]
+    born = getattr(st, "st_birthtime", st.st_mtime)
     raw = (meta.get("создано") or "").strip()
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
-        stamps.append(datetime.strptime(raw, "%Y-%m-%d").timestamp())
-    return datetime.fromtimestamp(min(stamps), timezone.utc).isoformat()
+        said = datetime.strptime(raw, "%Y-%m-%d")
+        # тот же день — у файла есть время, оно точнее; день раньше — заметку перенесли, верим шапке
+        if said.date() < datetime.fromtimestamp(born).date():
+            born = said.timestamp()
+    return datetime.fromtimestamp(born, timezone.utc).isoformat()
 
 
 def rows():
