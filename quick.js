@@ -6,6 +6,7 @@ const Q = {
   tab: "basket", q: "", open: {}, folds: {}, award: null, tick: null, poll: null, hidden: new Set(), sel: null,
 };
 const Q_ORDER = ["Новые", "Быстрые", "Актуальное", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
+const Q_FOLDERS = ["Бизнес/Задачи на внедрение", "Бизнес/Идеи по бизнесу", "Бизнес/Гипотезы проектов", "Бизнес/Разобрать", "Цели (Бизнес)", "Не забыть", "WIKI (База)/Полезные материалы", "WIKI (База)/Изучить информацию", "Контент/Идеи", "Контент/Сценарии"];
 const Q_RANKS = [[0, "Авральщик"], [10, "Догоняющий"], [30, "Успевающий"], [70, "На шаг впереди"], [150, "Разгребатель"]];
 const Q_CHEERS = ["Разобрал всё, что взял", "Список пуст, и голова тоже", "Взял и сделал. Редкое дело", "Сегодня разгребли — завтра не копится"];
 const Q_FRESH_H = 24;
@@ -61,7 +62,7 @@ async function qLoad(force) {
 /* Мои правки держатся на устройстве, пока облако их не догонит: мост пишет в заметку не мгновенно,
    и без этого после обновления страницы сделанное «воскресает». */
 function qMark(note, op, value) {
-  const f = { status: "status", basket: "basket", minutes: "minutes" }[op];
+  const f = { status: "status", basket: "basket", minutes: "minutes", move: "folder" }[op];
   if (!f && op !== "step" && op !== "trash") return null;
   const p = qRead("bd-pending") || {}, cur = p[note.id] || {};
   if (f) cur[f] = value[f];
@@ -81,11 +82,13 @@ function qOverlay(notes) {
       && (f.status === undefined || n.status === f.status)
       && (f.basket === undefined || n.basket === f.basket)
       && (f.minutes === undefined || n.minutes === f.minutes)
+      && (f.folder === undefined || n.folder === f.folder)
       && (f.stepsDone || []).every(i => n.steps?.[i]?.done);
     if (caught) { delete p[id]; dirty = true; continue; }
     if (f.status !== undefined) { n.status = f.status; if (f.doneAt) n.updated_at = f.doneAt; }
     if (f.basket !== undefined) n.basket = f.basket;
     if (f.minutes !== undefined) n.minutes = f.minutes;
+    if (f.folder !== undefined) n.folder = f.folder;
     (f.stepsDone || []).forEach(i => { if (n.steps?.[i]) { n.steps[i].done = true; n.steps[i].basket = false; } });
   }
   if (dirty) qStore("bd-pending", p);
@@ -207,6 +210,12 @@ function qUndone(note) {
   if (note.basket) { note.basket = false; qChange(note, "basket", { basket: false }); }
   render(); toast(`Вернул в хранилище: ${note.title}`);
 }
+function qMove(note, folder) {
+  if (!folder || folder === note.folder) return;
+  note.folder = folder;
+  qChange(note, "move", { folder });
+  render(); toast(`Переложил: ${note.title} → ${folder.replace(/\//g, " → ")}`);
+}
 
 /* ---------- удаление: заметка переезжает в папку «Корзина» хранилища, вернуть можно ---------- */
 function qTrash(ids) {
@@ -300,7 +309,7 @@ function qDetail(n) {
       </button>`).join("")}<div class="q-hint">Нажми на шаг — он уйдёт в работу на сегодня</div></div>` : ""}
     <div class="q-detail-acts">
       <a class="q-link" href="${qObsidian(n)}">Открыть в Obsidian ${QI.out}</a>
-      <span class="q-path">${qe(n.folder || "")}</span>
+      <span class="q-move-wrap"><small>Папка:</small><select class="q-move" data-q-move="${n.id}">${(n.folder && !Q_FOLDERS.includes(n.folder) ? [n.folder, ...Q_FOLDERS] : Q_FOLDERS).map(f => `<option value="${qe(f)}"${f === n.folder ? " selected" : ""}>${qe(f.replace(/\//g, " → "))}</option>`).join("")}</select></span>
     </div>
   </div>`;
 }
@@ -687,6 +696,11 @@ $("board").addEventListener("toggle", e => { if (e.target.classList?.contains("q
 $("board").addEventListener("input", e => {
   if (e.target.id !== "qSearch") return;
   Q.q = e.target.value; render();
+});
+$("board").addEventListener("change", e => {
+  if (e.target.dataset.qMove === undefined) return;
+  const n = Q.notes.find(x => x.id === e.target.dataset.qMove);
+  if (n) qMove(n, e.target.value);
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && Q.sel && view.mode === "quick") { Q.sel = null; render(); } }, true);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { qTick(); if (view.mode === "quick") qLoad(); } });

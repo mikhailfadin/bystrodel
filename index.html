@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "29";
+var APP_V = "30";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -714,6 +714,10 @@ html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .q-link{color:var(--accent);display:inline-flex;gap:6px;align-items:center;font-weight:500;text-decoration:none}
 .q-link:hover{text-decoration:underline;text-underline-offset:3px}
 .q-path{font:12px var(--mono);color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q-move-wrap{display:flex;align-items:center;gap:8px;min-width:0;flex:1;justify-content:flex-end}
+.q-move-wrap small{font-size:12px;color:var(--mute);flex:none}
+.q-move{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border:none;border-radius:10px;font-size:13px;color:var(--dim);height:32px;padding:0 8px;cursor:pointer;min-width:0}
+.q-move:hover,.q-move:focus{box-shadow:inset 0 0 0 1px var(--accent)}
 .q-focus-text{margin-top:12px;text-align:left;width:min(560px,100%)}
 .q-focus-text summary{cursor:pointer;color:var(--mute);font-size:13px;text-align:center;list-style:none}
 .q-focus-text summary::-webkit-details-marker{display:none}
@@ -838,6 +842,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
   .q-acts{grid-column:1/-1;justify-content:flex-end}
   .q-ring{width:200px;height:200px}
   .q-ring b{font-size:44px}
+  .q-move{max-width:100%}
 }
 /* быстрые дела — телефон */
 .to-tasks{display:flex;align-items:center;gap:6px;width:auto!important;padding:0 14px;font-weight:600;font-size:14px}
@@ -2088,6 +2093,6 @@ render();
 paintFbar();
 if (typeof initCloud === "function") initCloud();
 </script>
-<script src="quick.js?v=16"></script>
+<script src="quick.js?v=17"></script>
 </body>
 </html>

@@ -211,6 +211,12 @@ def push(token):
         api("POST", "bd_notes", changed, token, prefer="resolution=merge-duplicates")
     for note_id in gone:                      # заметку удалили или переименовали
         api("PATCH", f"bd_notes?id=eq.{note_id}", {"deleted": True}, token)
+    after = state.get("basket_after_move") or {}     # переложенная заметка возвращается в работу под новым id
+    for note_id in list(after):
+        if note_id in seen:
+            api("PATCH", f"bd_notes?id=eq.{note_id}", {"basket": True, "basket_day": date.today().isoformat()}, token)
+            after.pop(note_id)
+    state["basket_after_move"] = after
     state["notes"] = seen
     state["trashed"] = sorted(trashed - set(gone))
     STATE.write_text(json.dumps(state, ensure_ascii=False))
@@ -246,7 +252,7 @@ def apply(token):
     trashed = set(state.get("trashed", []))  # удалено из приложения — не сбой доступа
     done = 0
     for change in pending:
-        note = api("GET", f"bd_notes?id=eq.{change['note_id']}&select=path", token=token)
+        note = api("GET", f"bd_notes?id=eq.{change['note_id']}&select=path,basket", token=token)
         result = {"applied_at": datetime.now(timezone.utc).isoformat(), "error": None}
         try:
             if not note:
@@ -260,6 +266,32 @@ def apply(token):
             path = VAULT / note[0]["path"]
             if not path.exists():
                 raise RuntimeError("файла нет на диске")
+            if change["op"] == "move":              # заметка переезжает в другую папку хранилища
+                folder = str(change["value"]["folder"])
+                if folder not in FOLDERS:
+                    raise RuntimeError(f"папки «{folder}» нет в списке")
+                rel = Path(note[0]["path"])
+                target = ZONE / folder / rel.name
+                if target != path:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    n = 2
+                    while target.exists():
+                        target = ZONE / folder / f"{rel.stem} ({n}){rel.suffix}"
+                        n += 1
+                    path.write_text(set_meta(path.read_text(encoding="utf-8"), "тип", FOLDERS[folder]), encoding="utf-8")
+                    path.rename(target)
+                    new_rel = str(target.relative_to(VAULT))
+                    new_id = hashlib.sha1(new_rel.encode()).hexdigest()[:20]
+                    api("PATCH", f"bd_notes?id=eq.{change['note_id']}", {"deleted": True}, token)
+                    trashed.add(change["note_id"])
+                    state.get("notes", {}).pop(change["note_id"], None)
+                    mine.pop(change["note_id"], None)
+                    if note[0].get("basket"):
+                        state.setdefault("basket_after_move", {})[new_id] = True
+                    log("переложил:", note[0]["path"], "→", new_rel)
+                api("PATCH", f"bd_changes?id=eq.{change['id']}", result, token)
+                done += 1
+                continue
             if change["op"] == "trash":             # не стираем: переносим в «Claude/Корзина», путь сохраняем
                 rel = Path(note[0]["path"])
                 inner = rel.relative_to("Claude") if rel.parts[0] == "Claude" else rel
