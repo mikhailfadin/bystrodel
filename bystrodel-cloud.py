@@ -274,6 +274,19 @@ def set_step(text, index, done):
     return text[:m.start()] + f"- [{'x' if done else ' '}] {m.group(2)}" + text[m.end():]
 
 
+def set_steps(text, items):
+    """Раздел «## Шаги» из списка строк. Отметки совпадающих по тексту пунктов сохраняем."""
+    done = {m.group(1).strip() for m in re.finditer(r"^- \[[xX]\]\s*(.+)$", text, re.M)}
+    rows = [f"- [{'x' if t.strip() in done else ' '}] {t.strip()}" for t in items if t.strip()]
+    block = "## Шаги\n" + "\n".join(rows) + "\n\n" if rows else ""
+    found = re.search(r"^##\s*Шаги\s*$.*?(?=^##\s|\Z)", text, re.M | re.S)
+    if found:
+        text = text[:found.start()] + block + text[found.end():]
+    elif rows:
+        text = text.rstrip("\n") + "\n\n" + block
+    return re.sub(r"\n{3,}", "\n\n", text).rstrip("\n") + "\n"
+
+
 def apply(token):
     pending = api("GET", "bd_changes?applied_at=is.null&order=created_at&limit=50", token=token)
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
@@ -351,6 +364,8 @@ def apply(token):
                 text = set_meta(text, "минуты", int(value["minutes"]))
             elif op == "start":
                 text = set_meta(text, "подходы", int(value.get("starts", 0)))
+            elif op == "steps":
+                text = set_steps(text, [str(x) for x in value.get("items", [])])
             elif op == "step":
                 text = set_step(text, int(value["index"]), bool(value["done"]))
             else:

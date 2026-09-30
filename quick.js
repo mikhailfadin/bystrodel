@@ -3,7 +3,7 @@
 
 const Q = {
   notes: [], settings: null, loaded: false, loading: false, error: "", at: null,
-  tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null,
+  tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null, steps: null,
 };
 const Q_ORDER = ["Новые", "Быстрые", "Актуальное", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
 const Q_FOLDERS = ["Бизнес/Задачи на внедрение", "Бизнес/Идеи по бизнесу", "Бизнес/Гипотезы проектов", "Бизнес/Разобрать", "Цели (Бизнес)", "Не забыть", "WIKI (База)/Полезные материалы", "WIKI (База)/Изучить информацию", "Контент/Идеи", "Контент/Сценарии"];
@@ -244,7 +244,20 @@ const QI = {
 };
 
 const qObsidian = n => `obsidian://open?vault=Obsidian&file=${encodeURIComponent(String(n.path || "").replace(/\.md$/, ""))}`;
+const qStepsPrefill = n => (n.steps || []).length
+  ? n.steps.map(s => s.t).join("\n")
+  : (n.excerpt || "").split("\n").map(s => s.replace(/^\s*(?:[-—*•]|\d+[.)])\s+/, "").trim()).filter(Boolean).join("\n");
 function qDetail(n) {
+  if (Q.steps && Q.steps.id === n.id) {
+    return `<div class="q-detail">
+      <textarea class="q-steps-edit">${qe(Q.steps.text)}</textarea>
+      <div class="q-hint">Каждая строка — отдельный шаг</div>
+      <div class="q-detail-acts">
+        <button class="q-soft sm" data-q-steps-save>Сохранить</button>
+        <button class="q-soft sm" data-q-steps-cancel>Отмена</button>
+      </div>
+    </div>`;
+  }
   const steps = n.steps || [];
   const text = (n.excerpt || "").trim();
   const long = text.length >= 1490;
@@ -255,10 +268,21 @@ function qDetail(n) {
         <span class="q-box">${s.done ? QI.check : s.basket ? QI.bolt : ""}</span><span>${qe(s.t)}</span>
       </button>`).join("")}<div class="q-hint">Нажми на шаг — он уйдёт в работу на сегодня</div></div>` : ""}
     <div class="q-detail-acts">
-      <a class="q-link" href="${qObsidian(n)}">Открыть в Obsidian ${QI.out}</a>
+      <span class="q-acts-left">
+        <a class="q-link" href="${qObsidian(n)}">Открыть в Obsidian ${QI.out}</a>
+        <button class="q-link" data-q-steps="${n.id}">${steps.length ? "Править чек-лист" : "Сделать чек-лист"}</button>
+      </span>
       <span class="q-move-wrap"><small>Папка:</small><select class="q-move" data-q-move="${n.id}">${(n.folder && !Q_FOLDERS.includes(n.folder) ? [n.folder, ...Q_FOLDERS] : Q_FOLDERS).map(f => `<option value="${qe(f)}"${f === n.folder ? " selected" : ""}>${qe(f.replace(/\//g, " → "))}</option>`).join("")}</select></span>
     </div>
   </div>`;
+}
+function qSetSteps(note, lines) {
+  const items = lines.map(s => s.trim()).filter(Boolean);
+  const was = new Map((note.steps || []).map(s => [s.t, s.done]));
+  note.steps = items.map(t => ({ t, done: !!was.get(t), basket: false }));
+  qChange(note, "steps", { items });
+  Q.steps = null; render();
+  toast(items.length ? `Чек-лист: ${items.length} ${qPlural(items.length, "шаг", "шага", "шагов")}` : "Чек-лист убран");
 }
 function qItemBasket(e) {
   const open = Q.open["b:" + e.key];
@@ -569,6 +593,17 @@ $("board").addEventListener("click", e => {
     return render();
   }
   if (d.qUndone) { const n = Q.notes.find(x => x.id === d.qUndone); return n && qUndone(n); }
+  if (d.qSteps) {
+    const n = Q.notes.find(x => x.id === d.qSteps); if (!n) return;
+    Q.steps = { id: n.id, text: qStepsPrefill(n) };
+    return render();
+  }
+  if (d.qStepsCancel !== undefined) { Q.steps = null; return render(); }
+  if (d.qStepsSave !== undefined) {
+    const note = Q.notes.find(x => x.id === (Q.steps || {}).id); if (!note) return;
+    const ta = document.querySelector(".q-steps-edit");
+    return qSetSteps(note, (ta ? ta.value : "").split("\n"));
+  }
   if (d.qSuggest !== undefined) {
     const pick = Q.notes.filter(n => n.quick && n.status !== "сделано" && !n.basket && !(n.steps || []).length).slice(0, 3);
     pick.forEach(n => { n.basket = true; n.basket_day = qDay(); qChange(n, "basket", { basket: true }); });
@@ -579,6 +614,7 @@ $("board").addEventListener("click", e => {
   if (d.qHome !== undefined) { Q.award = null; Q.tab = "basket"; return render(); }
 });
 $("board").addEventListener("input", e => {
+  if (e.target.classList.contains("q-steps-edit")) { if (Q.steps) Q.steps.text = e.target.value; return; }
   if (e.target.id !== "qSearch") return;
   Q.q = e.target.value; render();
 });
