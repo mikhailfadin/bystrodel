@@ -32,9 +32,10 @@ ZONE = VAULT / "Claude"
 TRASH = VAULT / "Claude" / "Корзина"
 BOARD = VAULT / "Kanban задач" / "Kanban задач.md"
 DONE_COLUMN = {"сделано": "## ✅ Готово", "изучено": "## 📚 Полезные статьи"}
+BACK_COLUMN = "## 🆕 Новые"
 
 
-def board_move(name, column):
+def board_move(name, column, done=True):
     """Двигаем карточку заметки по доске: в колонку с галочкой или прочь (column=None).
     Карточки нет — доску не трогаем: новые карточки ставит бот, а не мост."""
     if not BOARD.exists():
@@ -50,7 +51,7 @@ def board_move(name, column):
     if card is None:
         return False
     if column:
-        card = re.sub(r"^- \[ \]", "- [x]", card)
+        card = re.sub(r"^- \[[ xX]\]", "- [x]" if done else "- [ ]", card)
         for i, line in enumerate(rows):
             if line.strip() == column:
                 at = i + 1 + (1 if i + 1 < len(rows) and not rows[i + 1].strip() else 0)
@@ -295,8 +296,11 @@ def apply(token):
                 raise RuntimeError(f"неизвестная правка {op}")
             path.write_text(text, encoding="utf-8")
             mine[change["note_id"]] = path.stat().st_mtime
-            if op == "status" and value.get("status") in DONE_COLUMN:
-                board_move(path.stem, DONE_COLUMN[value["status"]])
+            if op == "status":
+                if value.get("status") in DONE_COLUMN:
+                    board_move(path.stem, DONE_COLUMN[value["status"]])
+                else:                                 # вернули в хранилище — карточка снова не сделана
+                    board_move(path.stem, BACK_COLUMN, done=False)
             done += 1
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             log("нет связи, правка подождёт:", str(exc)[:120])

@@ -5,14 +5,22 @@ const Q = {
   notes: [], settings: null, loaded: false, loading: false, error: "", at: null,
   tab: "basket", q: "", open: {}, folds: {}, award: null, tick: null, poll: null, hidden: new Set(), sel: null,
 };
-const Q_ORDER = ["Быстрые", "Актуальное", "В работе", "Новые", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
+const Q_ORDER = ["Новые", "Быстрые", "Актуальное", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
 const Q_RANKS = [[0, "Авральщик"], [10, "Догоняющий"], [30, "Успевающий"], [70, "На шаг впереди"], [150, "Разгребатель"]];
 const Q_CHEERS = ["Разобрал всё, что взял", "Список пуст, и голова тоже", "Взял и сделал. Редкое дело", "Сегодня разгребли — завтра не копится"];
+const Q_FRESH_H = 24;
+const qFresh = n => n.note_mtime && Date.now() - new Date(n.note_mtime).getTime() < Q_FRESH_H * 3600e3;
 
 const qe = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const qDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const qYesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return qDay(d); };
 const qDoneDay = n => n.updated_at ? qDay(new Date(n.updated_at)) : "";
+function qWhen(n) {
+  const d = new Date(n.note_mtime), hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  if (qDay(d) === qDay()) return `сегодня ${hm}`;
+  if (qDay(d) === qYesterday()) return `вчера ${hm}`;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 const qIsDone = n => n.status === "сделано" || n.status === "изучено";
 const Q_STUDY_KINDS = ["материал", "исследование", "инструмент"];
 const qIsArticle = n => Q_STUDY_KINDS.includes(n.kind) || String(n.folder || "").startsWith("WIKI");
@@ -108,11 +116,12 @@ function qBasket() {
 }
 const quickCount = () => Q.loaded ? qBasket().length : "";
 const qGroup = n => {
+  if (qFresh(n)) return "Новые";
   if (n.kind === "не забыть") return "Не забыть";
   if (n.quick) return "Быстрые";
   if (["актуальное", "в работе", "когда-нибудь"].includes(n.status)) return n.status[0].toUpperCase() + n.status.slice(1);
   if (qIsArticle(n)) return "Полезные статьи";
-  return { "идея": "Идеи", "цель": "Цели", "материал": "Полезные статьи", "контент": "Контент", "гипотеза": "Гипотезы", "разобрать": "Разобрать" }[n.kind] || "Новые";
+  return { "идея": "Идеи", "цель": "Цели", "материал": "Полезные статьи", "контент": "Контент", "гипотеза": "Гипотезы", "разобрать": "Разобрать" }[n.kind] || "Задачи";
 };
 const qFind = key => {
   const [id, i] = String(key).split(":");
@@ -189,6 +198,12 @@ function qFinish(entry, { credit = true } = {}) {
   }
   if (credit) qCredit(note).then(() => render());
   return line;
+}
+function qUndone(note) {
+  note.status = "новое"; note.updated_at = new Date().toISOString();
+  qChange(note, "status", { status: "новое" });
+  if (note.basket) { note.basket = false; qChange(note, "basket", { basket: false }); }
+  render(); toast(`Вернул в хранилище: ${note.title}`);
 }
 
 /* ---------- удаление: заметка переезжает в папку «Корзина» хранилища, вернуть можно ---------- */
@@ -267,6 +282,7 @@ const QI = {
   minus: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7h8"/></svg>',
   out: '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H3v8h8V8.5M8 2h4v4M12 2 6.5 7.5"/></svg>',
   bolt: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M9.2 1 3 9h4.3l-.8 6L13 7H8.6z" fill="currentColor"/></svg>',
+  back: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5 3 7l3.5 3.5"/><path d="M3 7h7c1.7 0 3 1.3 3 3v0c0 1.7-1.3 3-3 3H7"/></svg>',
 };
 
 const qObsidian = n => `obsidian://open?vault=Obsidian&file=${encodeURIComponent(String(n.path || "").replace(/\.md$/, ""))}`;
@@ -297,8 +313,8 @@ function qItemBasket(e) {
     ? `<button class="q-go" data-q-timer="done">${study ? QI.book : QI.check}<span>${study ? "Изучил" : "Сделал"}</span></button>
        <button class="q-ic" data-q-full title="Развернуть таймер">${QI.expand}</button>`
     : `<button class="q-ic" data-q-done="${e.key}" title="${study ? "Изучил — останется в «Полезных статьях»" : "Уже сделал — без таймера"}">${study ? QI.book : QI.check}</button>
-       <button class="q-ic desk" data-q-drop="${e.key}" title="Убрать из «Сделать быстро» — останется во «Всё»">${QI.minus}</button>
-       <button class="q-ic danger desk" data-q-trash="${e.note.id}" title="Удалить в корзину">${QI.x}</button>
+       <button class="q-ic" data-q-drop="${e.key}" title="Вернуть в хранилище">${QI.minus}</button>
+       <button class="q-ic danger" data-q-trash="${e.note.id}" title="Удалить в корзину">${QI.x}</button>
        <button class="q-go" data-q-start="${e.key}">${QI.play}<span>Поехали</span></button>`;
   return `<div class="q-item${e.note.kind === "не забыть" ? " alarm" : ""}${open ? " open" : ""}${run ? " q-running" : ""}">
     <div class="q-swipe" data-note="${e.note.id}">
@@ -438,7 +454,7 @@ function qBody() {
   if (Q.tab === "done") {
     const all = Q.notes.filter(qIsDone).sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
     const day = all.filter(n => qDoneDay(n) === qDay());
-    const item = n => `<div class="q-done"><span class="q-tick">${QI.check}</span><span class="q-t"><b>${qe(n.title)}</b><span>${n.status === "изучено" ? "изучено · " : ""}${qDoneDay(n)}</span></span></div>`;
+    const item = n => `<div class="q-done"><span class="q-tick">${QI.check}</span><span class="q-t"><b>${qe(n.title)}</b><span>${n.status === "изучено" ? "изучено · " : ""}${qDoneDay(n)}</span></span><button class="q-ic" data-q-undone="${n.id}" title="Вернуть в хранилище">${QI.back}</button></div>`;
     const block = (k, label, arr, def) => {
       const shown = Q.folds[k] ?? def;
       return `<button class="q-fold" data-q-fold="${k}" aria-expanded="${shown}"><span>${label}</span><span class="n">${arr.length}</span><span class="q-chev${shown ? " open" : ""}">${QI.chev}</span></button>
@@ -450,6 +466,7 @@ function qBody() {
   const live = Q.notes.filter(n => n.status !== "сделано" && (!q || (n.title || "").toLowerCase().includes(q) || (n.excerpt || "").toLowerCase().includes(q)));
   const groups = Q_ORDER.map(g => {
     const list = live.filter(n => qGroup(n) === g);
+    if (g === "Новые") list.sort((a, b) => new Date(b.note_mtime) - new Date(a.note_mtime));
     if (!list.length) return "";
     const shown = Q.folds["g:" + g] ?? true;
     const cls = g === "Идеи" ? "idea" : g === "Не забыть" ? "alarm" : "grey";
@@ -457,7 +474,7 @@ function qBody() {
       ${shown ? `<div class="list">${list.map(n => {
         const steps = n.steps || [];
         const meta = steps.length ? `${steps.filter(s => s.done).length} из ${steps.length} шагов${n.starts ? ` · ${n.starts} ${qPlural(n.starts, "подход", "подхода", "подходов")}` : ""}` : `${qe(n.source || "")}${n.minutes ? ` · ${n.minutes} мин` : ""}`;
-        return qItemPlain(n, { cls, meta });
+        return qItemPlain(n, { cls, meta: g === "Новые" ? [qWhen(n), meta].filter(Boolean).join(" · ") : meta });
       }).join("")}</div>` : ""}`;
   }).join("");
   Q.visible = live;
@@ -634,6 +651,7 @@ $("board").addEventListener("click", e => {
     const line = qFinish(en, { credit: false });
     render(); return toast(line);
   }
+  if (d.qUndone) { const n = Q.notes.find(x => x.id === d.qUndone); return n && qUndone(n); }
   if (d.qSuggest !== undefined) {
     const pick = Q.notes.filter(n => n.quick && n.status !== "сделано" && !n.basket && !(n.steps || []).length).slice(0, 3);
     pick.forEach(n => { n.basket = true; n.basket_day = qDay(); qChange(n, "basket", { basket: true }); });

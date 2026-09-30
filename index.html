@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "26";
+var APP_V = "27";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -778,7 +778,8 @@ html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .q-search input:focus{box-shadow:inset 0 0 0 1.5px var(--accent)}
 .q-done{display:flex;gap:12px;align-items:center;padding:10px 14px;border-radius:var(--r);background:var(--surface)}
 .q-tick{width:24px;height:24px;border-radius:50%;background:var(--check);color:var(--check-mark);display:grid;place-items:center;flex:none}
-.q-done .q-t b{font-size:15px;color:var(--dim)}
+.q-done .q-t{flex:1;min-width:0}
+.q-done .q-t b{font-size:15px;color:var(--dim);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .q-state{padding:36px 28px;border-radius:20px;background:var(--surface);box-shadow:var(--shadow)}
 .q-state b{font-size:20px;font-weight:600}
 .q-state p{color:var(--dim);margin:8px 0 18px;max-width:520px}
@@ -905,6 +906,8 @@ html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
   .q-ice{grid-column:1/-1}
   .q-t b{font-size:15.5px}
   .q-acts .q-go{height:42px}
+  .q-acts .q-go[data-q-start]{width:42px;padding:0;justify-content:center}
+  .q-acts .q-go[data-q-start] span{display:none}
   .q-focus,.q-award{padding:28px 18px 24px;border-radius:22px}
   .q-focus-top b{font-size:22px}
   .q-focus .q-focus-acts{flex-direction:column;align-self:stretch}
@@ -2083,6 +2086,6 @@ render();
 paintFbar();
 if (typeof initCloud === "function") initCloud();
 </script>
-<script src="quick.js?v=13"></script>
+<script src="quick.js?v=14"></script>
 </body>
 </html>
