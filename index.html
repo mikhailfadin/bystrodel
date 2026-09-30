@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "31";
+var APP_V = "32";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -653,7 +653,6 @@ html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .q-tabs .n{font:600 12px var(--mono);opacity:.75}
 .q-tabs button.alarm:not(.on) .n{color:var(--todo);opacity:1}
 .q-sum{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 2px 10px;font:500 12px var(--mono);color:var(--mute);text-transform:uppercase;letter-spacing:.08em}
-.q-sum-hint{text-transform:none;letter-spacing:0;font:13px var(--sans)}
 .q-item{position:relative;overflow:hidden;background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow);--bar:var(--accent)}
 .q-line.q-item-line{display:grid;grid-template-columns:58px minmax(0,1fr) auto;gap:16px;align-items:center;padding:12px}
 .q-item.alarm,.q-row.alarm{--bar:var(--todo)}
@@ -718,12 +717,6 @@ html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .q-move-wrap small{font-size:12px;color:var(--mute);flex:none}
 .q-move{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);border:none;border-radius:10px;font-size:13px;color:var(--dim);height:32px;padding:0 8px;cursor:pointer;min-width:0}
 .q-move:hover,.q-move:focus{box-shadow:inset 0 0 0 1px var(--accent)}
-.q-focus-text{margin-top:12px;text-align:left;width:min(560px,100%)}
-.q-focus-text summary{cursor:pointer;color:var(--mute);font-size:13px;text-align:center;list-style:none}
-.q-focus-text summary::-webkit-details-marker{display:none}
-.q-focus-text summary:hover{color:var(--accent)}
-.q-focus-text .q-text{margin:10px 0}
-.q-focus-top{width:min(560px,100%)}
 .q-tools{display:flex;gap:10px;align-items:center;margin-bottom:6px}
 .q-tools .q-search{flex:1}
 .q-tools .q-search input{margin-bottom:0}
@@ -741,21 +734,6 @@ html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .q-row.chosen{box-shadow:inset 0 0 0 1.5px var(--accent)}
 .q-row.chosen .q-line{box-shadow:inset 0 0 0 1.5px var(--accent);border-radius:var(--r)}
 .q-row.chosen .sel-box{background:var(--accent);box-shadow:none;color:var(--on-accent)}
-.q-mini-ring{position:relative;width:58px;height:58px;flex:none}
-.q-mini-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
-.q-mini-ring circle{fill:none;stroke-width:11}
-.q-mini-ring .bg{stroke:var(--check-empty)}
-.q-mini-ring .fg{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset 1s linear}
-.q-mini-ring b{position:absolute;inset:0;display:grid;place-items:center;font:600 13px var(--mono);letter-spacing:-.03em}
-.q-mini-ring.sm{width:44px;height:44px}
-.q-mini-ring.sm b{font-size:11px}
-.q-item.q-running::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1.5px var(--accent);pointer-events:none;z-index:4}
-.q-running.up::after,.q-runbar.up .q-mini-ring{animation:pulse 1.2s infinite}
-.q-running.up .q-mini-ring b,.q-runbar.up .q-mini-ring b{color:var(--accent)}
-.q-run-acts{position:relative;z-index:1;display:flex;gap:8px;justify-content:flex-end;padding:0 12px 12px}
-.q-runbar{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:12px;padding:8px 10px;margin-bottom:10px;border-radius:18px;background:var(--surface);box-shadow:var(--shadow-lg),inset 0 0 0 1.5px var(--accent)}
-.q-runbar .q-t{flex:1;min-width:0}
-.q-runbar .q-t b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
 .q-done-bar{display:flex;align-items:center;gap:12px;padding:10px 10px 10px 14px;margin-bottom:12px;border-radius:18px;background:var(--surface);box-shadow:var(--shadow),inset 0 0 0 1.5px var(--check)}
 .q-done-bar .q-t{flex:1;min-width:0}
 .q-done-bar .q-t b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
@@ -763,11 +741,6 @@ html,body{touch-action:manipulation;-webkit-text-size-adjust:100%}
 .q-pick.static.studied{color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);opacity:1}
 button.q-pick.studied{cursor:pointer}
 button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
-.q-mins{display:flex;flex-direction:column;align-items:stretch;gap:3px;width:58px}
-.q-mins button{height:24px;border-radius:8px;font:600 14px/24px var(--mono);color:var(--dim);background:var(--accent-soft)}
-.q-mins button:hover{color:var(--accent)}
-.q-mins button.on{background:var(--accent);color:var(--on-accent)}
-.q-mins small{text-align:center;font-size:10px;color:var(--mute);line-height:1}
 .q-sel-here{display:flex;align-items:center;gap:6px;padding-right:10px}
 .q-sel-here .q-sel-n{min-width:26px;height:26px;padding:0 7px;border-radius:13px;background:var(--accent);color:var(--on-accent);font:600 12px/26px var(--mono);text-align:center}
 .q-sel-here .q-soft.sm{height:36px;padding:0 12px}
@@ -798,22 +771,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
 .q-soft:hover{background:var(--hover)}
 .q-soft.wide{width:100%;height:44px;color:var(--accent)}
 .q-focus-acts{display:flex;gap:10px;flex-wrap:wrap}
-.q-focus,.q-award{display:flex;flex-direction:column;align-items:center;text-align:center;gap:22px;padding:40px 28px 34px;border-radius:24px;background:var(--surface);box-shadow:var(--shadow)}
-.q-focus-top{display:flex;flex-direction:column;gap:6px;max-width:560px}
-.q-focus-top span{font:500 12px var(--mono);color:var(--mute);text-transform:uppercase;letter-spacing:.08em}
-.q-focus-top b{font-size:26px;font-weight:600;line-height:1.2;letter-spacing:-.015em}
-.q-ring{position:relative;width:240px;height:240px}
-.q-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
-.q-ring circle{fill:none;stroke-width:7}
-.q-ring .bg{stroke:var(--check-empty)}
-.q-ring .fg{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset 1s linear}
-.q-ring div{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.q-ring b{font:600 54px/1 var(--mono);letter-spacing:-.03em}
-.q-ring span{color:var(--mute);font-size:13px;margin-top:6px}
-.q-focus.up .q-ring b{color:var(--accent)}
-.q-focus.up .q-ring .bg{stroke:var(--accent-soft)}
-.q-focus .q-focus-acts{justify-content:center}
-.q-note{color:var(--mute);font-size:13px;margin:0}
+.q-award{display:flex;flex-direction:column;align-items:center;text-align:center;gap:22px;padding:40px 28px 34px;border-radius:24px;background:var(--surface);box-shadow:var(--shadow)}
 .q-award-n{font:700 96px/0.9 var(--mono);color:var(--accent);letter-spacing:-.05em}
 .q-award-l{color:var(--dim);margin-top:-14px}
 .q-award b{font-size:20px;font-weight:600;max-width:560px}
@@ -840,8 +798,6 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
   .q-side{position:static;order:-1}
   .q-mini,.q-rank{display:none}
   .q-acts{grid-column:1/-1;justify-content:flex-end}
-  .q-ring{width:200px;height:200px}
-  .q-ring b{font-size:44px}
   .q-move{max-width:100%}
 }
 /* быстрые дела — телефон */
@@ -865,8 +821,6 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
   .q-rank{display:block;flex:1 1 100%;padding:12px 16px}
   .q-rank-h b{font-size:15px}
   .q-rank-bar{margin-top:10px}
-  .q-sum-hint{display:none}
-  .q.focusing .q-side{display:none}
   .main.quick-view h1{font-size:26px;white-space:nowrap}
   .main.quick-view .head>div:first-child{min-width:0}
   .main.quick-view .sub{margin-top:4px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -888,16 +842,9 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
   .q-under-b.q-take{background:var(--accent);color:var(--on-accent)}
   .q-under-b.q-del{background:var(--todo);color:#fff}
   .q-under-b.q-study{background:#3FA66B;color:#fff}
-  .q-mini-ring{width:50px;height:50px}
-  .q-mins{width:50px}
-  .q-mins button{height:28px;line-height:28px}
-  .q-mini-ring b{font-size:12px}
-  .q-run-acts{padding:0 10px 10px}
   .q-done-bar .q-go{width:44px;height:44px;padding:0;justify-content:center;margin:0}
   .q-done-bar .q-go span{display:none}
   .q-done-bar{gap:10px;padding:10px 6px 10px 12px}
-  .q-run-acts .q-soft{flex:1}
-  .q-runbar{top:-4px}
   .q-swipe.q-far .q-under-b.q-take{width:0;overflow:hidden;padding:0}
   .q-swipe.q-far .q-under-b.q-del{width:100vw}
   .q-line.q-item-line{grid-template-columns:50px minmax(0,1fr);gap:12px;padding:10px}
@@ -912,13 +859,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
   .q-sel-here .q-soft.sm{width:38px;padding:0;justify-content:center}
   .q-ice{grid-column:1/-1}
   .q-t b{font-size:15.5px}
-  .q-acts .q-go{height:42px}
-  .q-acts .q-go[data-q-start]{width:42px;padding:0;justify-content:center}
-  .q-acts .q-go[data-q-start] span{display:none}
-  .q-focus,.q-award{padding:28px 18px 24px;border-radius:22px}
-  .q-focus-top b{font-size:22px}
-  .q-focus .q-focus-acts{flex-direction:column;align-self:stretch}
-  .q-focus .q-big,.q-focus .q-soft{width:100%;height:54px}
+  .q-award{padding:28px 18px 24px;border-radius:22px}
   .q-state{padding:26px 20px}
   .q-cheer{font-size:24px}
   .q-state .q-focus-acts{flex-direction:column}
@@ -2093,6 +2034,6 @@ render();
 paintFbar();
 if (typeof initCloud === "function") initCloud();
 </script>
-<script src="quick.js?v=18"></script>
+<script src="quick.js?v=19"></script>
 </body>
 </html>

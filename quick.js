@@ -1,9 +1,9 @@
-// ── Быстрые дела: всё из хранилища Obsidian, корзина на день, таймер 5/15 и серия.
+// ── Быстрые дела: всё из хранилища Obsidian, корзина на день и серия.
 // Заметки выгружает мост на маке (bd_notes), правки уходят очередью (bd_changes) и доезжают до Obsidian.
 
 const Q = {
   notes: [], settings: null, loaded: false, loading: false, error: "", at: null,
-  tab: "basket", q: "", open: {}, folds: {}, award: null, tick: null, poll: null, hidden: new Set(), sel: null,
+  tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null,
 };
 const Q_ORDER = ["Новые", "Быстрые", "Актуальное", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
 const Q_FOLDERS = ["Бизнес/Задачи на внедрение", "Бизнес/Идеи по бизнесу", "Бизнес/Гипотезы проектов", "Бизнес/Разобрать", "Цели (Бизнес)", "Не забыть", "WIKI (База)/Полезные материалы", "WIKI (База)/Изучить информацию", "Контент/Идеи", "Контент/Сценарии"];
@@ -63,7 +63,7 @@ async function qLoad(force) {
 /* Мои правки держатся на устройстве, пока облако их не догонит: мост пишет в заметку не мгновенно,
    и без этого после обновления страницы сделанное «воскресает». */
 function qMark(note, op, value) {
-  const f = { status: "status", basket: "basket", minutes: "minutes", move: "folder" }[op];
+  const f = { status: "status", basket: "basket", move: "folder" }[op];
   if (!f && op !== "step" && op !== "trash") return null;
   const p = qRead("bd-pending") || {}, cur = p[note.id] || {};
   if (f) cur[f] = value[f];
@@ -82,13 +82,11 @@ function qOverlay(notes) {
     const caught = !f.trash
       && (f.status === undefined || n.status === f.status)
       && (f.basket === undefined || n.basket === f.basket)
-      && (f.minutes === undefined || n.minutes === f.minutes)
       && (f.folder === undefined || n.folder === f.folder)
       && (f.stepsDone || []).every(i => n.steps?.[i]?.done);
     if (caught) { delete p[id]; dirty = true; continue; }
     if (f.status !== undefined) { n.status = f.status; if (f.doneAt) n.updated_at = f.doneAt; }
     if (f.basket !== undefined) n.basket = f.basket;
-    if (f.minutes !== undefined) n.minutes = f.minutes;
     if (f.folder !== undefined) n.folder = f.folder;
     (f.stepsDone || []).forEach(i => { if (n.steps?.[i]) { n.steps[i].done = true; n.steps[i].basket = false; } });
   }
@@ -165,10 +163,6 @@ function qToggleStep(note, i) {
   const keys = qStepKeys(); s.basket ? keys.add(`${note.id}:${i}`) : keys.delete(`${note.id}:${i}`); qSaveStepKeys(keys);
   render(); toast(s.basket ? "Шаг в работе" : "Шаг убран");
 }
-function qMinutes(entry) {
-  const m = entry.note.minutes === 15 ? 5 : 15;
-  entry.note.minutes = m; qChange(entry.note, "minutes", { minutes: m }); render();
-}
 async function qCredit(note) {
   note.starts = (note.starts || 0) + 1;
   qChange(note, "start", { starts: note.starts });
@@ -224,8 +218,6 @@ function qTrash(ids) {
   if (!gone.length) return;
   gone.forEach(n => Q.hidden.add(n.id));
   Q.notes = Q.notes.filter(n => !Q.hidden.has(n.id));
-  const t = qTimer();
-  if (t && gone.some(n => String(t.key).split(":")[0] === n.id)) qStore("bd-timer");
   let undone = false;
   const send = setTimeout(() => { if (!undone) gone.forEach(n => qChange(n, "trash", {})); }, 3300);
   render();
@@ -238,50 +230,6 @@ function qTrash(ids) {
   });
 }
 
-/* ---------- таймер: считает от времени окончания, переживает перезагрузку ---------- */
-const qTimer = () => qRead("bd-timer");
-function qStart(entry) {
-  const min = entry.note.minutes === 15 ? 15 : 5;
-  qStore("bd-timer", { key: entry.key, end: Date.now() + min * 60e3, full: min * 60, title: entry.step ? entry.step.t : entry.note.title, parent: entry.step ? entry.note.title : "", rang: false });
-  Q.award = null; Q.timerFull = false;
-  try { if (window.Notification && Notification.permission === "default") Notification.requestPermission(); } catch {}
-  render();
-}
-function qBeep() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [0, .35, .7].forEach(t => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
-      g.gain.setValueAtTime(.0001, ctx.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(.25, ctx.currentTime + t + .02);
-      g.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + t + .25);
-      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + .3);
-    });
-  } catch {}
-}
-function qTick() {
-  const t = qTimer();
-  if (!t) { clearInterval(Q.tick); Q.tick = null; document.title = "Быстродел"; return; }
-  const left = Math.max(0, Math.round((t.end - Date.now()) / 1000));
-  const txt = `${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")}`;
-  const clock = document.getElementById("qClock");
-  if (clock) {
-    clock.textContent = txt;
-    document.getElementById("qArc").setAttribute("stroke-dashoffset", (339.29 * (1 - left / t.full)).toFixed(2));
-    document.querySelectorAll(".q-focus,.q-running,.q-runbar").forEach(x => x.classList.toggle("up", left === 0));
-    const sub = document.getElementById("qClockSub"); if (sub) sub.textContent = left ? "осталось" : "время вышло";
-    const more = document.getElementById("qMore"); if (more) more.hidden = left > 0;
-  }
-  document.title = left ? `${txt} · ${t.title}` : "Время вышло · Быстродел";
-  if (!left && !t.rang) {
-    t.rang = true; qStore("bd-timer", t); qBeep();
-    try { if (window.Notification && Notification.permission === "granted") new Notification("Время вышло", { body: `${t.title}\nСделал? Ещё подход? Хватит?` }); } catch {}
-    if (view.mode !== "quick") toast(`Время вышло: ${t.title}`);
-  }
-}
-function qEnsureTick() { if (qTimer() && !Q.tick) { Q.tick = setInterval(qTick, 1000); qTick(); } }
-
 /* ---------- отрисовка ---------- */
 const QI = {
   check: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg>',
@@ -289,8 +237,6 @@ const QI = {
   play: '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 1.8v8.4L10 6z" fill="currentColor"/></svg>',
   chev: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 5.5 3 3 3-3"/></svg>',
   book: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5c2-.8 3.8-.6 5.5.6 1.7-1.2 3.5-1.4 5.5-.6v9c-2-.8-3.8-.6-5.5.6-1.7-1.2-3.5-1.4-5.5-.6z"/><path d="M8 4.1v9"/></svg>',
-  expand: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg>',
-  shrink: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 6.5h-4v-4M9.5 6.5l4-4M2.5 9.5h4v4M6.5 9.5l-4 4"/></svg>',
   minus: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7h8"/></svg>',
   out: '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H3v8h8V8.5M8 2h4v4M12 2 6.5 7.5"/></svg>',
   bolt: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M9.2 1 3 9h4.3l-.8 6L13 7H8.6z" fill="currentColor"/></svg>',
@@ -314,44 +260,27 @@ function qDetail(n) {
     </div>
   </div>`;
 }
-const qMiniRing = (cls = "") => `<div class="q-mini-ring ${cls}"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="54" class="bg"/><circle id="qArc" cx="60" cy="60" r="54" class="fg" stroke-dasharray="339.29" stroke-dashoffset="0"/></svg><b id="qClock">--:--</b></div>`;
 function qItemBasket(e) {
-  const min = e.note.minutes === 15 ? 15 : 5;
   const open = Q.open["b:" + e.key];
-  const t = qTimer(), run = t && t.key === e.key && !Q.timerFull;
   const study = !e.step && qStudy(e.note);
-  const meta = run ? "идёт подход" : e.step ? `${qe(e.note.title)} · шаг ${e.step.i + 1} из ${e.note.steps.length}` : `${qe(qGroup(e.note))}${e.note.source ? " · " + qe(e.note.source) : ""}${e.note.steps && e.note.steps.length ? ` · ${e.note.steps.filter(s => s.done).length} из ${e.note.steps.length} шагов` : ""}`;
-  const acts = run
-    ? `<button class="q-go" data-q-timer="done">${study ? QI.book : QI.check}<span>${study ? "Изучил" : "Сделал"}</span></button>
-       <button class="q-ic" data-q-full title="Развернуть таймер">${QI.expand}</button>`
-    : `<button class="q-ic" data-q-done="${e.key}" title="${study ? "Изучил — останется в «Полезных статьях»" : "Уже сделал — без таймера"}">${study ? QI.book : QI.check}</button>
-       <button class="q-ic" data-q-drop="${e.key}" title="Вернуть в хранилище">${QI.minus}</button>
-       <button class="q-ic danger" data-q-trash="${e.note.id}" title="Удалить в корзину">${QI.x}</button>
-       <button class="q-go" data-q-start="${e.key}">${QI.play}<span>Поехали</span></button>`;
-  return `<div class="q-item${e.note.kind === "не забыть" ? " alarm" : ""}${open ? " open" : ""}${run ? " q-running" : ""}">
+  const meta = e.step ? `${qe(e.note.title)} · шаг ${e.step.i + 1} из ${e.note.steps.length}` : `${qe(qGroup(e.note))}${e.note.source ? " · " + qe(e.note.source) : ""}${e.note.steps && e.note.steps.length ? ` · ${e.note.steps.filter(s => s.done).length} из ${e.note.steps.length} шагов` : ""}`;
+  return `<div class="q-item${e.note.kind === "не забыть" ? " alarm" : ""}${open ? " open" : ""}">
     <div class="q-swipe" data-note="${e.note.id}">
       <div class="q-under">
         <button class="q-under-b q-take" data-q-drop="${e.key}">${QI.minus}<span>Убрать</span></button>
         <button class="q-under-b q-del" data-q-trash="${e.note.id}">${QI.x}<span>Удалить</span></button>
       </div>
       <div class="q-line q-item-line">
-        ${run ? qMiniRing() : `<div class="q-mins" title="Сколько минут на подход">${[5, 15].map(m => `<button class="${min === m ? "on" : ""}" data-q-setmin="${m}" data-key="${e.key}">${m}</button>`).join("")}<small>мин</small></div>`}
         <button class="q-t q-t-btn" data-q-open="b:${e.key}" title="Что за дело"><b>${qe(e.step ? e.step.t : e.note.title)}</b><span>${meta}</span></button>
-        <div class="q-acts">${acts}</div>
+        <div class="q-acts">
+          <button class="q-ic" data-q-done="${e.key}" title="${study ? "Изучил — останется в «Полезных статьях»" : "Сделал"}">${study ? QI.book : QI.check}</button>
+          <button class="q-ic" data-q-drop="${e.key}" title="Вернуть в хранилище">${QI.minus}</button>
+          <button class="q-ic danger" data-q-trash="${e.note.id}" title="Удалить в корзину">${QI.x}</button>
+        </div>
       </div>
     </div>
-    ${run ? `<div class="q-run-acts"><button class="q-soft sm" id="qMore" data-q-timer="more" hidden>Ещё 15 минут</button><button class="q-soft sm" data-q-timer="stop">Хватит на сегодня</button></div>` : ""}
     ${open ? qDetail(e.note) : ""}
   </div>`;
-}
-function qRunbar() {
-  const t = qTimer();
-  if (!t || Q.timerFull || !Q.loaded) return "";
-  if (Q.tab === "basket" && !Q.award && qBasket().some(e => e.key === t.key)) return "";
-  const en = qFind(t.key), study = en && !en.step && qStudy(en.note);
-  return `<div class="q-runbar">${qMiniRing("sm")}<div class="q-t"><b>${qe(t.title)}</b><span>идёт подход</span></div>
-    <button class="q-go" data-q-timer="done">${study ? QI.book : QI.check}<span>${study ? "Изучил" : "Сделал"}</span></button>
-    <button class="q-ic" data-q-full title="Развернуть таймер">${QI.expand}</button></div>`;
 }
 function qItemPlain(n, { cls = "", meta = "" } = {}) {
   const steps = n.steps || [];
@@ -412,22 +341,6 @@ function qToolbar(list, search) {
   return `<div class="q-tools">${search ? `<div class="q-search"><input id="qSearch" placeholder="Найти в хранилище" autocomplete="off" value="${qe(Q.q)}"></div>` : `<span class="q-sel-gap"></span>`}
     <button class="q-soft sm" data-q-sel-start>Выбрать</button></div>`;
 }
-function qFocusHTML(t) {
-  return `<div class="q-focus">
-    <div class="q-focus-top">${t.parent ? `<span>${qe(t.parent)}</span>` : "<span>быстрое дело</span>"}<b>${qe(t.title)}</b>${(() => { const en = qFind(t.key); const x = en && (en.note.excerpt || "").trim(); return x ? `<details class="q-focus-text"${Q.focusText ? " open" : ""}><summary>Что за дело</summary><div class="q-text">${qe(x)}</div><a class="q-link" href="${qObsidian(en.note)}">Открыть в Obsidian ${QI.out}</a></details>` : ""; })()}</div>
-    <div class="q-ring">
-      <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="54" class="bg"/><circle id="qArc" cx="60" cy="60" r="54" class="fg" stroke-dasharray="339.29" stroke-dashoffset="0"/></svg>
-      <div><b id="qClock">--:--</b><span id="qClockSub">осталось</span></div>
-    </div>
-    <div class="q-focus-acts">
-      ${(() => { const en = qFind(t.key), study = en && !en.step && qStudy(en.note); return `<button class="q-big" data-q-timer="done">${study ? QI.book : QI.check}<span>${study ? "Изучил" : "Сделал"}</span></button>`; })()}
-      <button class="q-soft" id="qMore" data-q-timer="more" hidden>Ещё 15 минут</button>
-      <button class="q-soft" data-q-timer="stop">Хватит на сегодня</button>
-      <button class="q-soft" data-q-full>${QI.shrink}<span>Свернуть</span></button>
-    </div>
-    <p class="q-note">Подход засчитается в серию, даже если дело не закончено</p>
-  </div>`;
-}
 function qAwardHTML(a) {
   const next = qBasket().length;
   return `<div class="q-done-bar">
@@ -441,22 +354,19 @@ function qBody() {
   if (!Q.loaded || (Q.loading && !Q.notes.length)) return '<div class="empty">Загружаю дела из хранилища…</div>';
   if (Q.error === "login") return '<div class="q-state"><b>Нужен вход</b><p>Дела из хранилища лежат в облаке — войди в аккаунт (значок человечка справа сверху).</p></div>';
   if (Q.error && !Q.notes.length) return `<div class="q-state"><b>${Q.error === "offline" ? "Нет интернета" : "Облако не ответило"}</b><p>Попробую снова через минуту.</p><button class="q-soft" data-q-reload>Повторить сейчас</button></div>`;
-  const t = qTimer();
-  if (t && Q.timerFull) return qFocusHTML(t);
   const award = Q.award ? qAwardHTML(Q.award) : "";
 
   const basket = qBasket();
   if (Q.tab === "basket") {
     if (basket.length) {
-      const min = basket.reduce((a, e) => a + (e.note.minutes === 15 ? 15 : 5), 0);
-      return award + `<div class="q-sum"><span>${basket.length} ${qPlural(basket.length, "дело", "дела", "дел")} · около ${min} мин</span><span class="q-sum-hint">Слева у дела выбери 5 или 15 минут</span></div>
-        <div class="list">${basket.sort((a, b) => (t && b.key === t.key) - (t && a.key === t.key)).map(qItemBasket).join("")}</div>`;
+      return award + `<div class="q-sum"><span>${basket.length} ${qPlural(basket.length, "дело", "дела", "дел")}</span></div>
+        <div class="list">${basket.map(qItemBasket).join("")}</div>`;
     }
     const doneToday = Q.notes.filter(n => qIsDone(n) && qDoneDay(n) === qDay()).length;
     if (doneToday) return award + `<div class="q-state cleared"><div class="q-cheer">${Q_CHEERS[doneToday % Q_CHEERS.length]}</div>
       <p>Сегодня закрыто ${doneToday} ${qPlural(doneToday, "дело", "дела", "дел")} · серия ${qStreak().n} ${qPlural(qStreak().n, "день", "дня", "дней")}</p>
       <div class="q-focus-acts"><button class="q-soft" data-q-tab="all">Взять ещё из «Всё»</button></div></div>`;
-    return `<div class="q-state"><b>Пока ничего не в работе</b><p>Набери дела на сегодня: из «Всё из хранилища» или попроси подобрать быстрые. У каждого дела выберешь 5 или 15 минут и нажмёшь «Поехали».</p>
+    return `<div class="q-state"><b>Пока ничего не в работе</b><p>Набери дела на сегодня из «Всё из хранилища» — и отмечай сделанные.</p>
       <div class="q-focus-acts"><button class="q-big" data-q-suggest>${QI.bolt}<span>Подобрать быстрые</span></button><button class="q-soft" data-q-tab="all">Открыть «Всё»</button></div></div>`;
   }
   if (Q.tab === "remember") {
@@ -486,7 +396,7 @@ function qBody() {
     return `<button class="q-fold ${cls}" data-q-fold="g:${g}" aria-expanded="${shown}"><span>${g}</span><span class="n">${list.length}</span><span class="q-chev${shown ? " open" : ""}">${QI.chev}</span></button>
       ${shown ? `<div class="list">${list.map(n => {
         const steps = n.steps || [];
-        const base = steps.length ? `${steps.filter(s => s.done).length} из ${steps.length} шагов${n.starts ? ` · ${n.starts} ${qPlural(n.starts, "подход", "подхода", "подходов")}` : ""}` : `${qe(n.source || "")}${n.minutes ? ` · ${n.minutes} мин` : ""}`;
+        const base = steps.length ? `${steps.filter(s => s.done).length} из ${steps.length} шагов${n.starts ? ` · ${n.starts} ${qPlural(n.starts, "подход", "подхода", "подходов")}` : ""}` : qe(n.source || "");
         const meta = g === "Новые" ? [qWhen(n), qPath(n), base].filter(Boolean).join(" · ") : [qPath(n), base].filter(Boolean).join(" · ");
         return qItemPlain(n, { cls, meta });
       }).join("")}</div>` : ""}`;
@@ -521,15 +431,14 @@ function qSide() {
       <div class="q-rank-bar"><i style="width:${pct}%"></i></div>
       <div class="q-rank-l"><span>${r.cur[1]}</span><span>${r.next ? `${r.next[1]} · ещё ${r.next[0] - r.total}` : "высшее звание"}</span></div>
     </div>
-    ${qTimer() ? "" : `<div class="q-card q-mini">
+    <div class="q-card q-mini">
       <button class="q-soft wide" data-q-suggest>${QI.bolt}<span>Подобрать быстрые</span></button>
       <div class="q-mini-l">${basket.length ? `В работе ${basket.length} · до ночи` : "Список обнуляется ночью"}</div>
-    </div>`}`;
+    </div>`;
 }
 function renderQuick() {
   if ((!Q.loaded || (Q.error === "login" && typeof user !== "undefined" && user)) && !Q.loading) qLoad(true);
   if (!Q.poll) Q.poll = setInterval(() => { if (view.mode === "quick" && !document.hidden) qLoad(true); }, 60e3);
-  qEnsureTick();
 
   $("h1Plain").hidden = false; $("h1Plain").textContent = "Быстрые дела";
   $("h1Lead").hidden = true; $("period").hidden = true; $("steps").hidden = true;
@@ -546,7 +455,7 @@ function renderQuick() {
 
   const focused = document.activeElement?.id === "qSearch";
   const caret = focused ? document.activeElement.selectionStart : 0;
-  const t = qTimer(), basket = Q.loaded ? qBasket() : [];
+  const basket = Q.loaded ? qBasket() : [];
   const counts = {
     basket: basket.length,
     remember: Q.notes.filter(n => n.kind === "не забыть" && n.status !== "сделано").length,
@@ -554,15 +463,14 @@ function renderQuick() {
     all: Q.notes.filter(n => n.status !== "сделано").length,
   };
   const tabs = [["basket", "Сделать быстро", "Быстро"], ["remember", "Не забыть", "Не забыть"], ["done", "Сделано", "Сделано"], ["all", "Всё из хранилища", "Всё"]];
-  $("board").innerHTML = `<div class="q${t && Q.timerFull ? " focusing" : ""}">
+  $("board").innerHTML = `<div class="q">
     <div class="q-main">
-      ${t && Q.timerFull ? "" : `<div class="q-tabs">${tabs.map(([k, l, sh]) => `<button class="${Q.tab === k ? "on" : ""}${k === "remember" ? " alarm" : ""}" data-q-tab="${k}"><span class="l-full">${l}</span><span class="l-short">${sh}</span>${counts[k] ? `<span class="n">${counts[k]}</span>` : ""}</button>`).join("")}</div>`}
-      <div class="q-body">${qRunbar()}${qBody()}</div>
+      <div class="q-tabs">${tabs.map(([k, l, sh]) => `<button class="${Q.tab === k ? "on" : ""}${k === "remember" ? " alarm" : ""}" data-q-tab="${k}"><span class="l-full">${l}</span><span class="l-short">${sh}</span>${counts[k] ? `<span class="n">${counts[k]}</span>` : ""}</button>`).join("")}</div>
+      <div class="q-body">${qBody()}</div>
     </div>
     <aside class="q-side">${Q.loaded && !Q.error ? qSide() : ""}</aside>
   </div>`;
   if (focused) { const s = $("qSearch"); s.focus(); s.setSelectionRange(caret, caret); }
-  qTick();
 }
 
 /* ---------- свайп влево на телефоне: «В работу» и «Удалить», длинный свайп — сразу в корзину ---------- */
@@ -621,7 +529,6 @@ $("board").addEventListener("click", e => {
   Q.swOpen = null;
   const b = e.target.closest("button"); if (!b) return;
   const d = b.dataset;
-  if (d.qFull !== undefined) { Q.timerFull = !Q.timerFull; return render(); }
   if (d.qTab) { Q.tab = d.qTab; Q.award = null; Q.sel = null; return render(); }
   if (d.qTrash) return qTrash([d.qTrash]);
   if (d.qSelStart !== undefined) { Q.sel = new Set(); Q.open = {}; return render(); }
@@ -649,20 +556,17 @@ $("board").addEventListener("click", e => {
   if (d.qOpen) { Q.open[d.qOpen] = !Q.open[d.qOpen]; return render(); }
   if (d.qToggle) { const n = Q.notes.find(x => x.id === d.qToggle); return n && qToggleBasket(n); }
   if (d.qStep) { const [id, i] = d.qStep.split(":"); const n = Q.notes.find(x => x.id === id); return n && qToggleStep(n, +i); }
-  if (d.qSetmin) {
-    const en = qFind(d.key), m = +d.qSetmin;
-    if (!en || en.note.minutes === m) return;
-    en.note.minutes = m; qChange(en.note, "minutes", { minutes: m }); return render();
-  }
-  if (d.qStart) { const en = qFind(d.qStart); return en && qStart(en); }
   if (d.qDrop) {
     const en = qFind(d.qDrop); if (!en) return;
     return en.step ? qToggleStep(en.note, en.step.i) : qToggleBasket(en.note);
   }
   if (d.qDone) {
     const en = qFind(d.qDone); if (!en) return;
-    const line = qFinish(en, { credit: false });
-    render(); return toast(line);
+    const title = en.step ? en.step.t : en.note.title;
+    const line = qFinish(en);
+    const s = qStreak();
+    Q.award = { title, line, streak: Math.max(s.n, s.today ? s.n : s.n + 1) };
+    return render();
   }
   if (d.qUndone) { const n = Q.notes.find(x => x.id === d.qUndone); return n && qUndone(n); }
   if (d.qSuggest !== undefined) {
@@ -671,29 +575,9 @@ $("board").addEventListener("click", e => {
     Q.tab = "basket"; render();
     return toast(pick.length ? `В работу ${pick.length} ${qPlural(pick.length, "быстрое дело", "быстрых дела", "быстрых дел")}` : "Быстрых дел нет — загляни во «Всё»");
   }
-  if (d.qTimer) {
-    const t = qTimer(); if (!t) return render();
-    const en = qFind(t.key);
-    if (d.qTimer === "more") {
-      qStore("bd-timer", { ...t, end: Date.now() + 15 * 60e3, full: 15 * 60, rang: false });
-      if (en) qCredit(en.note);
-      render(); return toast("Второй подход пошёл");
-    }
-    qStore("bd-timer"); clearInterval(Q.tick); Q.tick = null; document.title = "Быстродел"; Q.timerFull = false;
-    if (!en) return render();
-    if (d.qTimer === "stop") {
-      qCredit(en.note).then(render);
-      render(); return toast(`Подход засчитан: ${t.title}`);
-    }
-    const line = qFinish(en);
-    const s = qStreak();
-    Q.award = { title: t.title, line, streak: Math.max(s.n, s.today ? s.n : s.n + 1) };
-    return render();
-  }
-  if (d.qNext !== undefined) { Q.award = null; const list = qBasket(); return list.length ? qStart(list[0]) : render(); }
+  if (d.qNext !== undefined) { Q.award = null; return render(); }
   if (d.qHome !== undefined) { Q.award = null; Q.tab = "basket"; return render(); }
 });
-$("board").addEventListener("toggle", e => { if (e.target.classList?.contains("q-focus-text")) Q.focusText = e.target.open; }, true);
 $("board").addEventListener("input", e => {
   if (e.target.id !== "qSearch") return;
   Q.q = e.target.value; render();
@@ -704,7 +588,6 @@ $("board").addEventListener("change", e => {
   if (n) qMove(n, e.target.value);
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && Q.sel && view.mode === "quick") { Q.sel = null; render(); } }, true);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { qTick(); if (view.mode === "quick") qLoad(); } });
-qEnsureTick();
+document.addEventListener("visibilitychange", () => { if (!document.hidden && view.mode === "quick") qLoad(); });
 setTimeout(() => { if (typeof user !== "undefined" && user && !Q.loaded) qLoad(); }, 4000);
 try { if (localStorage.getItem("bd-view") === "quick") go("quick", "quick"); } catch {}
