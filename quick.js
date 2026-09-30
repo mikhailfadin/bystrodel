@@ -10,14 +10,15 @@ const Q_FOLDERS = ["Бизнес/Задачи на внедрение", "Биз�
 const Q_RANKS = [[0, "Авральщик"], [10, "Догоняющий"], [30, "Успевающий"], [70, "На шаг впереди"], [150, "Разгребатель"]];
 const Q_CHEERS = ["Разобрал всё, что взял", "Список пуст, и голова тоже", "Взял и сделал. Редкое дело", "Сегодня разгребли — завтра не копится"];
 const Q_FRESH_H = 24;
-const qFresh = n => n.note_mtime && Date.now() - new Date(n.note_mtime).getTime() < Q_FRESH_H * 3600e3;
+const qBorn = n => n.created || n.note_mtime;
+const qFresh = n => qBorn(n) && Date.now() - new Date(qBorn(n)).getTime() < Q_FRESH_H * 3600e3;
 
 const qe = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const qDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const qYesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return qDay(d); };
 const qDoneDay = n => n.updated_at ? qDay(new Date(n.updated_at)) : "";
 function qWhen(n) {
-  const d = new Date(n.note_mtime), hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const d = new Date(qBorn(n)), hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   if (qDay(d) === qDay()) return `сегодня ${hm}`;
   if (qDay(d) === qYesterday()) return `вчера ${hm}`;
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -478,7 +479,7 @@ function qBody() {
   const live = Q.notes.filter(n => n.status !== "сделано" && (!q || (n.title || "").toLowerCase().includes(q) || (n.excerpt || "").toLowerCase().includes(q)));
   const groups = Q_ORDER.map(g => {
     const list = live.filter(n => qGroup(n) === g);
-    if (g === "Новые") list.sort((a, b) => new Date(b.note_mtime) - new Date(a.note_mtime));
+    if (g === "Новые") list.sort((a, b) => new Date(qBorn(b)) - new Date(qBorn(a)));
     if (!list.length) return "";
     const shown = Q.folds["g:" + g] ?? true;
     const cls = g === "Идеи" ? "idea" : g === "Не забыть" ? "alarm" : "grey";

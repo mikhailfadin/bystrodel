@@ -149,6 +149,16 @@ def parse(path):
     return meta, steps, excerpt
 
 
+def created_at(path, meta):
+    """Когда заметка появилась: шапка «создано» или время создания файла — что раньше."""
+    st = path.stat()
+    stamps = [getattr(st, "st_birthtime", st.st_mtime)]
+    raw = (meta.get("создано") or "").strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+        stamps.append(datetime.strptime(raw, "%Y-%m-%d").timestamp())
+    return datetime.fromtimestamp(min(stamps), timezone.utc).isoformat()
+
+
 def rows():
     out = []
     for folder, default_kind in FOLDERS.items():
@@ -180,10 +190,19 @@ def rows():
                 "starts": int(re.sub(r"\D", "", meta.get("подходы", "")) or 0),
                 "excerpt": excerpt,
                 "note_mtime": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
+                "created": created_at(path, meta),
                 "deleted": False,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             })
     return out
+
+
+def has_created(token):
+    try:
+        api("GET", "bd_notes?select=created&limit=1", token=token)
+        return True
+    except Exception:
+        return False
 
 
 def push(token):
@@ -207,7 +226,14 @@ def push(token):
                                       "err_at": int(time.time())}, ensure_ascii=False))
         log(f"стоп: видно {len(seen)} заметок вместо {len(known)}")
         return 0, 0
+    col = has_created(token)
+    if col and not state.get("created_sent"):     # колонку завели — один раз заливаем даты всем заметкам
+        changed = rows()
+        state["created_sent"] = True
+        log("колонка «создано» появилась — обновляю даты у всех заметок")
     if changed:
+        if not col:
+            changed = [{k: v for k, v in row.items() if k != "created"} for row in changed]
         api("POST", "bd_notes", changed, token, prefer="resolution=merge-duplicates")
     for note_id in gone:                      # заметку удалили или переименовали
         api("PATCH", f"bd_notes?id=eq.{note_id}", {"deleted": True}, token)
