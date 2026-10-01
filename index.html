@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "36";
+var APP_V = "37";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -762,6 +762,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
 .q-fold .q-chev{margin-left:0}
 .q-fold.idea span:first-child{color:var(--idea)}
 .q-fold.alarm span:first-child{color:var(--todo)}
+.q-fold.star span:first-child{color:var(--accent)}
 .q-fold+.list{margin-bottom:6px}
 .q-search input{width:100%;height:44px;border:0;border-radius:22px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);padding:0 18px;outline:none;margin-bottom:6px}
 .q-search input:focus{box-shadow:inset 0 0 0 1.5px var(--accent)}
@@ -2045,6 +2046,6 @@ render();
 paintFbar();
 if (typeof initCloud === "function") initCloud();
 </script>
-<script src="quick.js?v=23"></script>
+<script src="quick.js?v=24"></script>
 </body>
 </html>

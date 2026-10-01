@@ -5,7 +5,7 @@ const Q = {
   notes: [], settings: null, loaded: false, loading: false, error: "", at: null,
   tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null, steps: null, rename: null,
 };
-const Q_ORDER = ["Новые", "Быстрые", "Актуальное", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
+const Q_ORDER = ["Новые", "Актуальное", "Быстрые", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
 const Q_FOLDERS = ["Бизнес/Задачи на внедрение", "Бизнес/Идеи по бизнесу", "Бизнес/Гипотезы проектов", "Бизнес/Разобрать", "Цели (Бизнес)", "Не забыть", "WIKI (База)/Полезные материалы", "WIKI (База)/Изучить информацию", "Контент/Идеи", "Контент/Сценарии"];
 const Q_RANKS = [[0, "Авральщик"], [10, "Догоняющий"], [30, "Успевающий"], [70, "На шаг впереди"], [150, "Разгребатель"]];
 const Q_CHEERS = ["Разобрал всё, что взял", "Список пуст, и голова тоже", "Взял и сделал. Редкое дело", "Сегодня разгребли — завтра не копится"];
@@ -223,6 +223,13 @@ function qUndone(note) {
   if (note.basket) { note.basket = false; qChange(note, "basket", { basket: false }); }
   render(); toast(`Вернул в хранилище: ${note.title}`);
 }
+function qStar(note) {
+  const on = note.status === "актуальное";
+  note.status = on ? "новое" : "актуальное";
+  note.updated_at = new Date().toISOString();
+  qChange(note, "status", { status: note.status });
+  render(); toast(on ? `Убрал из актуальных: ${note.title}` : `В актуальное: ${note.title}`);
+}
 function qMove(note, folder) {
   if (!folder || folder === note.folder) return;
   note.folder = folder;
@@ -259,6 +266,7 @@ const QI = {
   out: '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H3v8h8V8.5M8 2h4v4M12 2 6.5 7.5"/></svg>',
   bolt: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M9.2 1 3 9h4.3l-.8 6L13 7H8.6z" fill="currentColor"/></svg>',
   back: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5 3 7l3.5 3.5"/><path d="M3 7h7c1.7 0 3 1.3 3 3v0c0 1.7-1.3 3-3 3H7"/></svg>',
+  star: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1.5 9.6 6.2 14.7 6.3 10.7 9.4 12.1 14.2 8 11.3 3.9 14.2 5.3 9.4 1.3 6.3 6.3 6.2Z" fill="currentColor"/></svg>',
 };
 
 const qObsidian = n => `obsidian://open?vault=Obsidian&file=${encodeURIComponent(String(n.path || "").replace(/\.md$/, ""))}`;
@@ -359,6 +367,7 @@ function qItemPlain(n, { cls = "", meta = "", shelf = false } = {}) {
         ${here ? `<div class="q-sel-here">
           <span class="q-sel-n">${Q.sel.size}</span>
           <button class="q-soft sm" data-q-sel-take title="Взять выбранные в работу">${QI.bolt}<span>В работу</span></button>
+          <button class="q-soft sm" data-q-sel-star title="Пометить выбранные актуальными">${QI.star}<span>В актуальное</span></button>
           <button class="q-soft sm danger" data-q-sel-trash title="Удалить выбранные в корзину">${QI.x}<span>Удалить</span></button>
         </div>` : ""}
       </div>
@@ -376,6 +385,7 @@ function qItemPlain(n, { cls = "", meta = "", shelf = false } = {}) {
       <div class="q-under">
         ${canStudy ? `<button class="q-under-b q-study" data-q-done="${n.id}">${QI.book}<span>Изучил</span></button>` : ""}
         ${n.status === "изучено" || stepBasket ? "" : `<button class="q-under-b q-take" data-q-toggle="${n.id}">${n.basket ? QI.minus : QI.bolt}<span>${n.basket ? "Из работы" : "В работу"}</span></button>`}
+        ${qIsDone(n) ? "" : `<button class="q-under-b q-star" data-q-star="${n.id}">${QI.star}<span>${n.status === "актуальное" ? "Из актуальных" : "В актуальное"}</span></button>`}
         <button class="q-under-b q-read" data-q-read="${n.id}">${QI.book}<span>${n.read ? "Не изучаю" : "Изучить"}</span></button>
         <button class="q-under-b q-del" data-q-trash="${n.id}">${QI.x}<span>Удалить</span></button>
       </div>
@@ -384,7 +394,7 @@ function qItemPlain(n, { cls = "", meta = "", shelf = false } = {}) {
           <span class="q-t"><b>${qe(n.title)}</b><span>${meta}</span>${n.quick ? `<span class="q-quick-tag">быстрое дело</span>` : ""}</span>
           <span class="q-chev${open ? " open" : ""}">${QI.chev}</span>
         </button>
-        <div class="q-row-side">${pick}${canStudy ? `<button class="q-ic${shelf ? "" : " desk"}" data-q-done="${n.id}" title="Изучил — останется в «Полезных статьях»">${QI.book}</button>` : ""}${!article && !qIsDone(n) ? `<button class="q-ic" data-q-done="${n.id}" title="Сделал — уйдёт в «Сделано»">${QI.check}</button>` : ""}<button class="q-ic danger desk" data-q-trash="${n.id}" title="Удалить в корзину">${QI.x}</button></div>
+        <div class="q-row-side">${pick}${qIsDone(n) ? "" : `<button class="q-ic" data-q-star="${n.id}" title="${n.status === "актуальное" ? "Убрать из актуальных" : "В актуальное"}">${QI.star}</button>`}${canStudy ? `<button class="q-ic${shelf ? "" : " desk"}" data-q-done="${n.id}" title="Изучил — останется в «Полезных статьях»">${QI.book}</button>` : ""}${!article && !qIsDone(n) ? `<button class="q-ic" data-q-done="${n.id}" title="Сделал — уйдёт в «Сделано»">${QI.check}</button>` : ""}<button class="q-ic danger desk" data-q-trash="${n.id}" title="Удалить в корзину">${QI.x}</button></div>
       </div>
     </div>
     ${open ? qDetail(n) : ""}
@@ -398,6 +408,7 @@ function qToolbar(list, search) {
       <button class="q-soft sm" data-q-sel-all>${list.length && list.every(x => Q.sel.has(x.id)) ? "Снять все" : "Все"}</button>
       <span class="q-sel-gap"></span>
       <button class="q-soft sm" data-q-sel-take ${n ? "" : "disabled"}>${QI.bolt}<span>В работу</span></button>
+      <button class="q-soft sm" data-q-sel-star ${n ? "" : "disabled"}>${QI.star}<span>В актуальное</span></button>
       <button class="q-soft sm danger" data-q-sel-trash ${n ? "" : "disabled"}>${QI.x}<span>В корзину</span></button>
       <button class="q-soft sm" data-q-sel-cancel>Готово</button>
     </div>`;
@@ -464,7 +475,8 @@ function qBody() {
     if (!list.length) return "";
     const shown = Q.folds["g:" + g] ?? true;
     const cls = g === "Идеи" ? "idea" : g === "Не забыть" ? "alarm" : "grey";
-    return `<button class="q-fold ${cls}" data-q-fold="g:${g}" aria-expanded="${shown}"><span>${g}</span><span class="n">${list.length}</span><span class="q-chev${shown ? " open" : ""}">${QI.chev}</span></button>
+    const foldCls = g === "Актуальное" ? `${cls} star` : cls;
+    return `<button class="q-fold ${foldCls}" data-q-fold="g:${g}" aria-expanded="${shown}"><span>${g}</span><span class="n">${list.length}</span><span class="q-chev${shown ? " open" : ""}">${QI.chev}</span></button>
       ${shown ? `<div class="list">${list.map(n => {
         const steps = n.steps || [];
         const base = steps.length ? `${steps.filter(s => s.done).length} из ${steps.length} шагов${n.starts ? ` · ${n.starts} ${qPlural(n.starts, "подход", "подхода", "подходов")}` : ""}` : qe(n.source || "");
@@ -623,6 +635,12 @@ $("board").addEventListener("click", e => {
     Q.sel = null; render();
     return toast(`В работу: ${picked.length}`);
   }
+  if (d.qSelStar !== undefined) {
+    const picked = Q.notes.filter(n => Q.sel.has(n.id) && n.status !== "актуальное");
+    picked.forEach(n => { n.status = "актуальное"; n.updated_at = new Date().toISOString(); qChange(n, "status", { status: "актуальное" }); });
+    Q.sel = null; render();
+    return toast(`В актуальное: ${picked.length}`);
+  }
   if (d.qReload !== undefined) { Q.error = ""; return qLoad(true); }
   if (d.qFold) { Q.folds[d.qFold] = !(Q.folds[d.qFold] ?? (d.qFold !== "all")); return render(); }
   if (d.qOpen) { Q.open[d.qOpen] = !Q.open[d.qOpen]; return render(); }
@@ -642,6 +660,7 @@ $("board").addEventListener("click", e => {
     return render();
   }
   if (d.qUndone) { const n = Q.notes.find(x => x.id === d.qUndone); return n && qUndone(n); }
+  if (d.qStar) { const n = Q.notes.find(x => x.id === d.qStar); return n && qStar(n); }
   if (d.qSteps) {
     const n = Q.notes.find(x => x.id === d.qSteps); if (!n) return;
     Q.steps = { id: n.id, text: qStepsPrefill(n) };
