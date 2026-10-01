@@ -125,10 +125,10 @@ function qBasket() {
 }
 const quickCount = () => Q.loaded ? qBasket().length : "";
 const qGroup = n => {
+  if (["актуальное", "в работе", "когда-нибудь"].includes(n.status)) return n.status[0].toUpperCase() + n.status.slice(1);
   if (qFresh(n)) return "Новые";
   if (n.kind === "не забыть") return "Не забыть";
   if (n.quick) return "Быстрые";
-  if (["актуальное", "в работе", "когда-нибудь"].includes(n.status)) return n.status[0].toUpperCase() + n.status.slice(1);
   if (qIsArticle(n)) return "Полезные статьи";
   return { "идея": "Идеи", "цель": "Цели", "материал": "Полезные статьи", "контент": "Контент", "гипотеза": "Гипотезы", "разобрать": "Разобрать" }[n.kind] || "Задачи";
 };
@@ -281,6 +281,7 @@ function qDetail(n) {
       <div class="q-detail-acts">
         <button class="q-soft sm" data-q-steps-save>Сохранить</button>
         <button class="q-soft sm" data-q-steps-cancel>Отмена</button>
+        <button class="q-soft sm danger" data-q-steps-drop="${n.id}">Удалить чек-лист</button>
       </div>
     </div>`;
   }
@@ -667,6 +668,7 @@ $("board").addEventListener("click", e => {
     return render();
   }
   if (d.qStepsCancel !== undefined) { Q.steps = null; return render(); }
+  if (d.qStepsDrop) { const n = Q.notes.find(x => x.id === d.qStepsDrop); return n && qSetSteps(n, []); }
   if (d.qStepsSave !== undefined) {
     const note = Q.notes.find(x => x.id === (Q.steps || {}).id); if (!note) return;
     const ta = document.querySelector(".q-steps-edit");
