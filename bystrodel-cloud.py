@@ -325,6 +325,29 @@ def apply(token):
         note = api("GET", f"bd_notes?id=eq.{change['note_id']}&select=path,basket", token=token)
         result = {"applied_at": datetime.now(timezone.utc).isoformat(), "error": None}
         try:
+            if change["op"] == "export":            # задача вернулась в хранилище новой заметкой
+                v = change["value"]
+                title = re.sub(r'[\\/:*?"<>|]', "", str(v.get("title", ""))).strip()[:120] or "Без названия"
+                folder = str(v.get("folder") or "Бизнес/Разобрать")
+                if folder not in FOLDERS:
+                    folder = "Бизнес/Разобрать"
+                target = ZONE / folder / f"{title}.md"
+                n = 2
+                while target.exists():
+                    target = ZONE / folder / f"{title} ({n}).md"
+                    n += 1
+                target.parent.mkdir(parents=True, exist_ok=True)
+                head = ["---", f"тип: {FOLDERS[folder]}", "статус: новое", "быстрое: нет",
+                        "решил: человек", "источник: задачник", f"создано: {date.today().isoformat()}", "---", ""]
+                body = str(v.get("text", "")).strip()
+                steps = [str(x).strip() for x in (v.get("steps") or []) if str(x).strip()]
+                if steps:
+                    body += ("\n\n" if body else "") + "## Шаги\n" + "\n".join(f"- [ ] {t}" for t in steps)
+                target.write_text("\n".join(head) + body.strip() + "\n", encoding="utf-8")
+                log("вернул в хранилище:", str(target.relative_to(VAULT)))
+                api("PATCH", f"bd_changes?id=eq.{change['id']}", result, token)
+                done += 1
+                continue
             if not note:
                 raise RuntimeError("заметка не найдена")
             if change["op"] == "basket":            # корзина живёт только в облаке, файл не трогаем
