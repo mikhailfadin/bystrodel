@@ -523,7 +523,7 @@ function renderQuick() {
   if ((!Q.loaded || (Q.error === "login" && typeof user !== "undefined" && user)) && !Q.loading) qLoad(true);
   if (!Q.poll) Q.poll = setInterval(() => { if (view.mode === "quick" && !document.hidden) qLoad(true); }, 60e3);
 
-  $("h1Plain").hidden = false; $("h1Plain").textContent = "Быстрые дела";
+  $("h1Plain").hidden = false; $("h1Plain").textContent = "Хранилище";
   $("h1Lead").hidden = true; $("period").hidden = true; $("steps").hidden = true;
   $("barFill").parentElement.hidden = true; $("pct").hidden = true;
   const live = Q.notes.filter(n => n.status !== "сделано").length;
