@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "40";
+var APP_V = "41";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -956,6 +956,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
 
   <button class="frow" id="edPrioRow"><span>Приоритетная</span><span class="sw" id="edPrio"></span></button>
   <div class="hint">Приоритетные стоят выше остальных и выделены крупнее. Остальные выстраиваются по времени.</div>
+  <button class="frow" id="edToStore"><span>В хранилище</span><b>›</b></button>
   <div class="spent" id="edSpent" hidden><span>Потрачено</span><b id="edSpentVal"></b></div>
 
   <div class="actions">
@@ -1349,6 +1350,7 @@ function openCard(id, prefill = "") {
   $("drawerTitle").textContent = x ? "Задача" : "Новая задача";
   $("edTitle").value = draft.title;
   $("edDel").hidden = !x;
+  $("edToStore").hidden = !x;
   const spent = x ? spentOn(x.id) : 0;
   $("edSpent").hidden = !spent; $("edSpentVal").textContent = spent ? dur(spent) : "";
   closePops();
@@ -1451,6 +1453,21 @@ function saveCard() {
 }
 $("edSave").onclick = saveCard;
 $("edDel").onclick = () => { tasks = tasks.filter(k => k.id !== editId); save(); closeAll(); render(); toast("Задача удалена"); };
+$("edToStore").onclick = () => {
+  const x = tasks.find(k => k.id === editId);
+  if (!x) return;
+  if (typeof sb !== "undefined" && sb && typeof user !== "undefined" && user) {
+    sb.from("bd_changes").insert({
+      user_id: user.id,
+      note_id: "00000000000000000000",
+      op: "export",
+      value: { title: x.title, folder: "Бизнес/Разобрать" },
+    }).then(({ error }) => { if (error) toast("Не ушло в хранилище — проверь связь и повтори"); });
+  }
+  tasks = tasks.filter(k => k.id !== editId);
+  save(); closeAll(); render();
+  toast(`В хранилище: ${x.title}`);
+};
 
 /* ---------- перенос ---------- */
 let carrySel = new Set(), carryTarget = "next", carryPicked = null;
@@ -2046,6 +2063,6 @@ render();
 paintFbar();
 if (typeof initCloud === "function") initCloud();
 </script>
-<script src="quick.js?v=27"></script>
+<script src="quick.js?v=28"></script>
 </body>
 </html>

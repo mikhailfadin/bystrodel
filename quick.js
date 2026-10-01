@@ -240,6 +240,22 @@ function qTrash(ids) {
   });
 }
 
+/* ---------- во входящие задачника: заметка уходит в корзину хранилища, дело появляется в tasks ---------- */
+function qToInboxBulk(ids) {
+  const picked = Q.notes.filter(n => ids.includes(n.id) && !Q.hidden.has(n.id));
+  if (!picked.length) return;
+  picked.forEach(n => { Q.hidden.add(n.id); qDropRead(n); });
+  Q.notes = Q.notes.filter(n => !Q.hidden.has(n.id));
+  picked.forEach(n => {
+    tasks.push({ id: uid(), title: n.title, date: INBOX, time: "", prio: false, done: false, doneAt: null, pos: Math.max(-1, ...onDate(INBOX).map(x => x.pos)) + 1, carry: 0 });
+  });
+  save();
+  picked.forEach(n => qChange(n, "trash", {}));
+  render();
+  toast(picked.length === 1 ? `Во входящие: ${picked[0].title}` : `Во входящие: ${picked.length} ${qPlural(picked.length, "дело", "дела", "дел")}`);
+}
+function qToInbox(note) { qToInboxBulk([note.id]); }
+
 /* ---------- отрисовка ---------- */
 const QI = {
   check: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg>',
@@ -252,6 +268,7 @@ const QI = {
   bolt: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M9.2 1 3 9h4.3l-.8 6L13 7H8.6z" fill="currentColor"/></svg>',
   back: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5 3 7l3.5 3.5"/><path d="M3 7h7c1.7 0 3 1.3 3 3v0c0 1.7-1.3 3-3 3H7"/></svg>',
   star: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1.5 9.6 6.2 14.7 6.3 10.7 9.4 12.1 14.2 8 11.3 3.9 14.2 5.3 9.4 1.3 6.3 6.3 6.2Z" fill="currentColor"/></svg>',
+  inbox: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7"/><path d="m5 6.5 3 3 3-3"/><path d="M2.5 9.5v3a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-3"/></svg>',
 };
 
 const qObsidian = n => `obsidian://open?vault=Obsidian&file=${encodeURIComponent(String(n.path || "").replace(/\.md$/, ""))}`;
@@ -316,9 +333,25 @@ function qRename(note, title) {
   toast(`Название изменено: ${title}`);
 }
 function qItemBasket(e) {
-  const open = Q.open["b:" + e.key];
   const study = qStudy(e.note);
   const meta = `${qe(qGroup(e.note))}${e.note.source ? " · " + qe(e.note.source) : ""}${e.note.steps && e.note.steps.length ? ` · ${e.note.steps.filter(s => s.done).length} из ${e.note.steps.length} шагов` : ""}`;
+  if (Q.sel) {
+    const on = Q.sel.has(e.note.id), here = on && Q.selLast === e.note.id;
+    return `<div class="q-row sel${on ? " chosen" : ""}">
+      <div class="q-line">
+        <button class="q-row-main" data-q-sel="${e.note.id}">
+          <span class="q-box sel-box">${on ? QI.check : ""}</span>
+          <span class="q-t"><b>${qe(e.note.title)}</b><span>${meta}</span></span>
+        </button>
+        ${here ? `<div class="q-sel-here">
+          <span class="q-sel-n">${Q.sel.size}</span>
+          <button class="q-soft sm" data-q-sel-inbox title="Отправить выбранные во входящие">${QI.inbox}<span>Во входящие</span></button>
+          <button class="q-soft sm danger" data-q-sel-trash title="Удалить выбранные в корзину">${QI.x}<span>Удалить</span></button>
+        </div>` : ""}
+      </div>
+    </div>`;
+  }
+  const open = Q.open["b:" + e.key];
   return `<div class="q-item${e.note.kind === "не забыть" ? " alarm" : ""}${open ? " open" : ""}">
     <div class="q-swipe" data-note="${e.note.id}">
       <div class="q-under">
@@ -330,6 +363,7 @@ function qItemBasket(e) {
         <div class="q-acts">
           <button class="q-ic" data-q-done="${e.key}" title="${study ? "Изучил — останется в «Полезных статьях»" : "Сделал"}">${study ? QI.book : QI.check}</button>
           <button class="q-ic" data-q-drop="${e.key}" title="Вернуть в хранилище">${QI.minus}</button>
+          <button class="q-ic" data-q-inbox="${e.note.id}" title="Во входящие">${QI.inbox}</button>
           <button class="q-ic danger" data-q-trash="${e.note.id}" title="Удалить в корзину">${QI.x}</button>
         </div>
       </div>
@@ -415,8 +449,9 @@ function qBody() {
 
   const basket = qBasket();
   if (Q.tab === "basket") {
+    Q.visible = basket.map(e => e.note);
     if (basket.length) {
-      return award + `<div class="q-sum"><span>${basket.length} ${qPlural(basket.length, "дело", "дела", "дел")}</span></div>
+      return award + qToolbar(Q.visible, false) + `<div class="q-sum"><span>${basket.length} ${qPlural(basket.length, "дело", "дела", "дел")}</span></div>
         <div class="list">${basket.map(qItemBasket).join("")}</div>`;
     }
     const doneToday = Q.notes.filter(n => qIsDone(n) && qDoneDay(n) === qDay()).length;
@@ -611,6 +646,7 @@ $("board").addEventListener("click", e => {
     return render();
   }
   if (d.qSelTrash !== undefined) { const ids = [...Q.sel]; Q.sel = null; return qTrash(ids); }
+  if (d.qSelInbox !== undefined) { const ids = [...Q.sel]; Q.sel = null; return qToInboxBulk(ids); }
   if (d.qSelTake !== undefined) {
     const picked = Q.notes.filter(n => Q.sel.has(n.id) && !n.basket);
     picked.forEach(n => { n.basket = true; n.basket_day = qDay(); qChange(n, "basket", { basket: true }); });
@@ -629,6 +665,7 @@ $("board").addEventListener("click", e => {
   if (d.qToggle) { const n = Q.notes.find(x => x.id === d.qToggle); return n && qToggleBasket(n); }
   if (d.qRead) { const n = Q.notes.find(x => x.id === d.qRead); return n && qToggleRead(n); }
   if (d.qStep) { const [id, i] = d.qStep.split(":"); const n = Q.notes.find(x => x.id === id); return n && qCheckStep(n, +i); }
+  if (d.qInbox) { const n = Q.notes.find(x => x.id === d.qInbox); return n && qToInbox(n); }
   if (d.qDrop) {
     const en = qFind(d.qDrop); if (!en) return;
     return qToggleBasket(en.note);
