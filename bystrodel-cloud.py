@@ -33,6 +33,7 @@ TRASH = VAULT / "Claude" / "Корзина"
 BOARD = VAULT / "Kanban задач" / "Kanban задач.md"
 DONE_COLUMN = {"сделано": "## ✅ Готово", "изучено": "## 📚 Полезные статьи"}
 BACK_COLUMN = "## 🆕 Новые"
+LIVE_COLUMN = {"актуальное": "## ⭐ Актуальное", "в работе": "## 🔧 В работе", "когда-нибудь": "## 🧊 Когда-нибудь"}
 
 
 def board_rename(old, new):
@@ -285,6 +286,22 @@ def set_step(text, index, done):
     return text[:m.start()] + f"- [{'x' if done else ' '}] {m.group(2)}" + text[m.end():]
 
 
+def set_text(text, body):
+    """Меняем только описание: шапка и раздел «## Шаги» не трогаются."""
+    head = ""
+    if text.startswith("---\n"):
+        end = text.find("\n---", 4)
+        if end > 0:
+            head, text = text[:end + 4], text[end + 4:]
+    steps = re.search(r"^##\s*Шаги\s*$.*", text, re.M | re.S)
+    tail = steps.group(0).rstrip("\n") if steps else ""
+    body = (body or "").strip()
+    out = head.rstrip("\n") + "\n\n" + body
+    if tail:
+        out += "\n\n" + tail
+    return re.sub(r"\n{3,}", "\n\n", out).rstrip("\n") + "\n"
+
+
 def set_steps(text, items):
     """Раздел «## Шаги» из списка строк. Отметки совпадающих по тексту пунктов сохраняем."""
     done = {m.group(1).strip() for m in re.finditer(r"^- \[[xX]\]\s*(.+)$", text, re.M)}
@@ -398,6 +415,8 @@ def apply(token):
                 text = set_meta(text, "минуты", int(value["minutes"]))
             elif op == "start":
                 text = set_meta(text, "подходы", int(value.get("starts", 0)))
+            elif op == "text":
+                text = set_text(text, str(value.get("text", "")))
             elif op == "steps":
                 text = set_steps(text, [str(x) for x in value.get("items", [])])
             elif op == "step":
@@ -407,10 +426,11 @@ def apply(token):
             path.write_text(text, encoding="utf-8")
             mine[change["note_id"]] = path.stat().st_mtime
             if op == "status":
-                if value.get("status") in DONE_COLUMN:
-                    board_move(path.stem, DONE_COLUMN[value["status"]])
-                else:                                 # вернули в хранилище — карточка снова не сделана
-                    board_move(path.stem, BACK_COLUMN, done=False)
+                st = value.get("status")
+                if st in DONE_COLUMN:
+                    board_move(path.stem, DONE_COLUMN[st])
+                else:                                 # живая задача: колонка по статусу, галочка снята
+                    board_move(path.stem, LIVE_COLUMN.get(st, BACK_COLUMN), done=False)
             done += 1
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             log("нет связи, правка подождёт:", str(exc)[:120])

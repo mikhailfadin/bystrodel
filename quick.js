@@ -38,7 +38,7 @@ function qStepKeys() {
 }
 function qSaveStepKeys(set) { qStore("bd-steps-basket", { day: qDay(), keys: [...set] }); }
 
-/* ---------- полка «почитать»: живёт на устройстве, день не при чём ---------- */
+/* ---------- полка «изучить»: живёт на устройстве, день не при чём ---------- */
 function qReadKeys() {
   const s = qRead("bd-read");
   return new Set(Array.isArray(s) ? s : []);
@@ -173,7 +173,7 @@ function qToggleStep(note, i) {
 function qToggleRead(note) {
   note.read = !note.read;
   const keys = qReadKeys(); note.read ? keys.add(note.id) : keys.delete(note.id); qSaveReadKeys(keys);
-  render(); toast(note.read ? `Отложил почитать: ${note.title}` : "Убрал из чтения");
+  render(); toast(note.read ? `Отложил изучить: ${note.title}` : "Убрал из списка");
 }
 function qDropRead(note) {
   if (!note.read) return;
@@ -332,7 +332,7 @@ function qItemBasket(e) {
         <button class="q-under-b q-del" data-q-trash="${e.note.id}">${QI.x}<span>Удалить</span></button>
       </div>
       <div class="q-line q-item-line">
-        <button class="q-t q-t-btn" data-q-open="b:${e.key}" title="Что за дело"><b>${qe(e.step ? e.step.t : e.note.title)}</b><span>${meta}</span></button>
+        <button class="q-t q-t-btn" data-q-open="b:${e.key}" title="Что за дело"><b>${qe(e.step ? e.step.t : e.note.title)}</b><span>${meta}</span>${e.note.quick ? `<span class="q-quick-tag">быстрое дело</span>` : ""}</button>
         <div class="q-acts">
           <button class="q-ic" data-q-done="${e.key}" title="${study ? "Изучил — останется в «Полезных статьях»" : "Сделал"}">${study ? QI.book : QI.check}</button>
           <button class="q-ic" data-q-drop="${e.key}" title="Вернуть в хранилище">${QI.minus}</button>
@@ -368,7 +368,7 @@ function qItemPlain(n, { cls = "", meta = "", shelf = false } = {}) {
   const pick = stepBasket
     ? `<span class="q-pick static">шаг в работе</span>`
     : n.status === "изучено" ? `<button class="q-pick static studied" data-q-undone="${n.id}" title="Нажми, чтобы вернуть в хранилище">изучено</button>`
-    : article ? `<button class="q-pick${n.read ? " reading" : ""}" data-q-read="${n.id}">${n.read ? "Из чтения" : "Почитать"}</button>`
+    : article ? `<button class="q-pick${n.read ? " reading" : ""}" data-q-read="${n.id}">${n.read ? "Не изучаю" : "Изучить"}</button>`
     : `<button class="q-pick" data-q-toggle="${n.id}">${n.basket ? "В работе" : "В работу"}</button>`;
   const canStudy = qStudy(n) && n.status !== "изучено";
   return `<div class="q-row${inB ? " picked" : ""}${open ? " open" : ""}${cls ? " " + cls : ""}">
@@ -376,15 +376,15 @@ function qItemPlain(n, { cls = "", meta = "", shelf = false } = {}) {
       <div class="q-under">
         ${canStudy ? `<button class="q-under-b q-study" data-q-done="${n.id}">${QI.book}<span>Изучил</span></button>` : ""}
         ${n.status === "изучено" || stepBasket ? "" : `<button class="q-under-b q-take" data-q-toggle="${n.id}">${n.basket ? QI.minus : QI.bolt}<span>${n.basket ? "Из работы" : "В работу"}</span></button>`}
-        <button class="q-under-b q-read" data-q-read="${n.id}">${QI.book}<span>${n.read ? "Из чтения" : "Почитать"}</span></button>
+        <button class="q-under-b q-read" data-q-read="${n.id}">${QI.book}<span>${n.read ? "Не изучаю" : "Изучить"}</span></button>
         <button class="q-under-b q-del" data-q-trash="${n.id}">${QI.x}<span>Удалить</span></button>
       </div>
       <div class="q-line">
         <button class="q-row-main" data-q-open="${n.id}">
-          <span class="q-t"><b>${qe(n.title)}</b><span>${meta}</span></span>
+          <span class="q-t"><b>${qe(n.title)}</b><span>${meta}</span>${n.quick ? `<span class="q-quick-tag">быстрое дело</span>` : ""}</span>
           <span class="q-chev${open ? " open" : ""}">${QI.chev}</span>
         </button>
-        <div class="q-row-side">${pick}${canStudy ? `<button class="q-ic${shelf ? "" : " desk"}" data-q-done="${n.id}" title="Изучил — останется в «Полезных статьях»">${QI.book}</button>` : ""}${n.kind === "не забыть" && n.status !== "сделано" ? `<button class="q-ic" data-q-done="${n.id}" title="Сделал">${QI.check}</button>` : ""}<button class="q-ic danger desk" data-q-trash="${n.id}" title="Удалить в корзину">${QI.x}</button></div>
+        <div class="q-row-side">${pick}${canStudy ? `<button class="q-ic${shelf ? "" : " desk"}" data-q-done="${n.id}" title="Изучил — останется в «Полезных статьях»">${QI.book}</button>` : ""}${!article && !qIsDone(n) ? `<button class="q-ic" data-q-done="${n.id}" title="Сделал — уйдёт в «Сделано»">${QI.check}</button>` : ""}<button class="q-ic danger desk" data-q-trash="${n.id}" title="Удалить в корзину">${QI.x}</button></div>
       </div>
     </div>
     ${open ? qDetail(n) : ""}
@@ -436,7 +436,7 @@ function qBody() {
   if (Q.tab === "read") {
     const list = Q.notes.filter(n => n.read && !qIsDone(n));
     Q.visible = list;
-    if (!list.length) return `<div class="q-state"><b>Пока нечего читать</b><p>Отложи сюда статьи и материалы из «Всё из хранилища» — свайпом влево или кнопкой «Почитать».</p>
+    if (!list.length) return `<div class="q-state"><b>Пока нечего читать</b><p>Отложи сюда статьи и материалы из «Всё из хранилища» — свайпом влево или кнопкой «Изучить».</p>
       <div class="q-focus-acts"><button class="q-soft" data-q-tab="all">Открыть «Всё»</button></div></div>`;
     return qToolbar(list, false) + `<div class="list">${list.map(n => qItemPlain(n, { meta: qPath(n), shelf: true })).join("")}</div>`;
   }
@@ -534,7 +534,7 @@ function renderQuick() {
     done: Q.notes.filter(n => qIsDone(n) && qDoneDay(n) === qDay()).length,
     all: Q.notes.filter(n => n.status !== "сделано").length,
   };
-  const tabs = [["basket", "Сделать быстро", "Быстро"], ["read", "Почитать", "Читать"], ["remember", "Не забыть", "Не забыть"], ["done", "Сделано", "Сделано"], ["all", "Всё из хранилища", "Всё"]];
+  const tabs = [["basket", "Быстро", "Быстро"], ["read", "Изучить", "Изучить"], ["remember", "Не забыть", "Не забыть"], ["done", "Сделано", "Сделано"], ["all", "Всё из хранилища", "Всё"]];
   $("board").innerHTML = `<div class="q">
     <div class="q-main">
       <div class="q-tabs">${tabs.map(([k, l, sh]) => `<button class="${Q.tab === k ? "on" : ""}${k === "remember" ? " alarm" : ""}" data-q-tab="${k}"><span class="l-full">${l}</span><span class="l-short">${sh}</span>${counts[k] ? `<span class="n">${counts[k]}</span>` : ""}</button>`).join("")}</div>
