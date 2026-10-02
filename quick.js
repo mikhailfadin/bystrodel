@@ -6,7 +6,7 @@ const Q = {
   tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null, steps: null, rename: null,
 };
 const Q_ORDER = ["Новые", "Актуальное", "Быстрые", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
-const Q_FOLDERS = ["Бизнес/Задачи на внедрение", "Бизнес/Идеи по бизнесу", "Бизнес/Гипотезы проектов", "Бизнес/Разобрать", "Цели (Бизнес)", "Не забыть", "WIKI (База)/Полезные материалы", "WIKI (База)/Изучить информацию", "Контент/Идеи", "Контент/Сценарии"];
+const Q_FOLDERS = ["Бизнес/Задачи", "Бизнес/Идеи по бизнесу", "Бизнес/Гипотезы проектов", "Бизнес/Разобрать", "Бизнес/Изучение", "Цели (Бизнес)", "Не забыть", "WIKI (База)/Полезные материалы", "Контент/Идеи", "Контент/Сценарии"];
 const Q_RANKS = [[0, "Авральщик"], [10, "Догоняющий"], [30, "Успевающий"], [70, "На шаг впереди"], [150, "Разгребатель"]];
 const Q_CHEERS = ["Разобрал всё, что взял", "Список пуст, и голова тоже", "Взял и сделал. Редкое дело", "Сегодня разгребли — завтра не копится"];
 const Q_FRESH_H = 24;
@@ -25,7 +25,7 @@ function qWhen(n) {
 }
 const qIsDone = n => n.status === "сделано" || n.status === "изучено";
 const Q_STUDY_KINDS = ["материал", "исследование", "инструмент"];
-const qIsArticle = n => Q_STUDY_KINDS.includes(n.kind) || String(n.folder || "").startsWith("WIKI");
+const qIsArticle = n => Q_STUDY_KINDS.includes(n.kind) || String(n.folder || "").startsWith("WIKI") || String(n.folder || "").startsWith("Бизнес/Изучение");
 const qStudy = n => qIsArticle(n) && !(n.steps || []).length;
 const qPlural = (n, one, few, many) => n % 10 === 1 && n % 100 !== 11 ? one : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
 const qStore = (k, v) => { try { v === undefined ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -247,7 +247,7 @@ function qToInboxBulk(ids) {
   picked.forEach(n => { Q.hidden.add(n.id); qDropRead(n); });
   Q.notes = Q.notes.filter(n => !Q.hidden.has(n.id));
   picked.forEach(n => {
-    tasks.push({ id: uid(), title: n.title, date: INBOX, time: "", prio: false, done: false, doneAt: null, pos: Math.max(-1, ...onDate(INBOX).map(x => x.pos)) + 1, carry: 0 });
+    tasks.push({ id: uid(), title: n.title, date: INBOX, time: "", prio: false, note: n.excerpt || "", done: false, doneAt: null, pos: Math.max(-1, ...onDate(INBOX).map(x => x.pos)) + 1, carry: 0 });
   });
   save();
   picked.forEach(n => qChange(n, "trash", {}));

@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "42";
+var APP_V = "43";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -477,6 +477,7 @@ h1{margin:0;font-size:40px;line-height:1.05;font-weight:600;letter-spacing:-.025
 .x:hover{background:var(--accent-soft)}
 .drawer textarea{width:100%;min-height:110px;resize:vertical;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:17px;line-height:1.4;outline:0;background:var(--bg);flex:none}
 .drawer textarea:focus{border-color:var(--check)}
+.drawer textarea#edNote{min-height:64px;font-size:14px;font-weight:400;margin-top:10px}
 .frow{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px 2px;border-bottom:1px solid var(--line);text-align:left;flex:none}
 .frow>span{color:var(--dim)}
 .frow>b{font:500 14px var(--mono);padding:8px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--line);min-width:120px;text-align:center}
@@ -941,6 +942,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
 <aside class="drawer" id="drawer" hidden>
   <div class="drawer-h"><b id="drawerTitle">Задача</b><button class="x" data-close aria-label="Закрыть">×</button></div>
   <textarea id="edTitle" placeholder="Что нужно сделать"></textarea>
+  <textarea id="edNote" placeholder="Пояснение: детали, ссылки, что именно сделать"></textarea>
 
   <button class="frow" id="edDateRow"><span>День</span><b id="edDateVal"></b></button>
   <div class="pop" id="edDatePop" hidden>
@@ -1285,7 +1287,7 @@ function quickAdd(inp) {
   const v = inp.value.trim();
   if (!v) return;
   const date = addDate();
-  tasks.push({ id: uid(), title: v, date, time: "", prio: false, done: false, doneAt: null, pos: Math.max(-1, ...onDate(date).map(x => x.pos)) + 1, carry: 0 });
+  tasks.push({ id: uid(), title: v, date, time: "", prio: false, note: "", done: false, doneAt: null, pos: Math.max(-1, ...onDate(date).map(x => x.pos)) + 1, carry: 0 });
   inp.value = "";
   save(); render();
 }
@@ -1349,6 +1351,7 @@ function openCard(id, prefill = "") {
   draft = x ? { ...x } : { title: prefill, date: addDate(), time: "", prio: false };
   $("drawerTitle").textContent = x ? "Задача" : "Новая задача";
   $("edTitle").value = draft.title;
+  $("edNote").value = x?.note || "";
   $("edDel").hidden = !x;
   $("edToStore").hidden = !x;
   const spent = x ? spentOn(x.id) : 0;
@@ -1437,15 +1440,16 @@ $("edPrioRow").onclick = () => { draft.prio = !draft.prio; drawCard(); };
 
 function saveCard() {
   const title = $("edTitle").value.trim();
+  const note = $("edNote").value.trim();
   if (!title) return;
   if (!$("edTimePop").hidden) draft.time = wheelTime();
   if (isBucket(draft.date)) draft.time = "";
   if (editId) {
     const x = tasks.find(k => k.id === editId);
     if (x.date !== draft.date) x.pos = Math.max(-1, ...onDate(draft.date).map(k => k.pos)) + 1;
-    Object.assign(x, { title, date: draft.date, time: draft.time, prio: draft.prio });
+    Object.assign(x, { title, date: draft.date, time: draft.time, prio: draft.prio, note });
   } else {
-    tasks.push({ id: uid(), title, date: draft.date, time: draft.time, prio: draft.prio, done: false, doneAt: null, pos: Math.max(-1, ...onDate(draft.date).map(k => k.pos)) + 1, carry: 0 });
+    tasks.push({ id: uid(), title, date: draft.date, time: draft.time, prio: draft.prio, note, done: false, doneAt: null, pos: Math.max(-1, ...onDate(draft.date).map(k => k.pos)) + 1, carry: 0 });
   }
   const wasNew = !editId, to = draft.date;
   save(); closeAll(); render();
@@ -1456,17 +1460,20 @@ $("edDel").onclick = () => { tasks = tasks.filter(k => k.id !== editId); save();
 $("edToStore").onclick = () => {
   const x = tasks.find(k => k.id === editId);
   if (!x) return;
+  const title = $("edTitle").value.trim();
+  const note = $("edNote").value.trim();
+  if (!title) return;
   if (typeof sb !== "undefined" && sb && typeof user !== "undefined" && user) {
     sb.from("bd_changes").insert({
       user_id: user.id,
       note_id: "00000000000000000000",
       op: "export",
-      value: { title: x.title, folder: "Бизнес/Разобрать" },
+      value: { title, folder: "Бизнес/Разобрать", text: note },
     }).then(({ error }) => { if (error) toast("Не ушло в хранилище — проверь связь и повтори"); });
   }
   tasks = tasks.filter(k => k.id !== editId);
   save(); closeAll(); render();
-  toast(`В хранилище: ${x.title}`);
+  toast(`В хранилище: ${title}`);
 };
 
 /* ---------- перенос ---------- */
@@ -1623,7 +1630,7 @@ $("board").addEventListener("keydown", e => {
   if (!inp || e.key !== "Enter" || e.isComposing) return;
   const title = inp.value.trim(), date = inp.dataset.addDate;
   if (!title) return;
-  tasks.push({ id: uid(), title, date, time: "", prio: false, done: false, doneAt: null, pos: Math.max(-1, ...onDate(date).map(k => k.pos)) + 1, carry: 0 });
+  tasks.push({ id: uid(), title, date, time: "", prio: false, note: "", done: false, doneAt: null, pos: Math.max(-1, ...onDate(date).map(k => k.pos)) + 1, carry: 0 });
   save(); render();
   document.querySelector(`[data-add-date="${date}"]`)?.focus();
   toast(`Добавлено на ${rel(date)}`);
@@ -2063,6 +2070,6 @@ render();
 paintFbar();
 if (typeof initCloud === "function") initCloud();
 </script>
-<script src="quick.js?v=29"></script>
+<script src="quick.js?v=30"></script>
 </body>
 </html>

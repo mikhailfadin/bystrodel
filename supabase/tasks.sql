@@ -12,6 +12,7 @@ create table if not exists public.tasks (
   done_at     timestamptz,
   pos         integer not null default 0,
   carry       integer not null default 0,
+  note        text not null default '',            -- пояснение к задаче
   deleted     boolean not null default false,      -- мягкое удаление, чтобы удалённое не воскресало с другого устройства
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()   -- время последней правки на устройстве; побеждает более позднее
