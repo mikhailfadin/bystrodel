@@ -3,13 +3,14 @@
 
 const Q = {
   notes: [], settings: null, loaded: false, loading: false, error: "", at: null,
-  tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null, steps: null, rename: null,
+  tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null, steps: null, rename: null, edit: null,
 };
 const Q_ORDER = ["Новые", "Актуальное", "Быстрые", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
 const Q_FOLDERS = ["Бизнес/Задачи", "Бизнес/Идеи по бизнесу", "Бизнес/Гипотезы проектов", "Бизнес/Разобрать", "Бизнес/Изучение", "Цели (Бизнес)", "Не забыть", "WIKI (База)/Полезные материалы", "Контент/Идеи", "Контент/Сценарии"];
 const Q_RANKS = [[0, "Авральщик"], [10, "Догоняющий"], [30, "Успевающий"], [70, "На шаг впереди"], [150, "Разгребатель"]];
 const Q_CHEERS = ["Разобрал всё, что взял", "Список пуст, и голова тоже", "Взял и сделал. Редкое дело", "Сегодня разгребли — завтра не копится"];
 const Q_FRESH_H = 24;
+const Q_DESC_CAP = 8000;
 const qBorn = n => n.created || n.note_mtime;
 const qFresh = n => qBorn(n) && Date.now() - new Date(qBorn(n)).getTime() < Q_FRESH_H * 3600e3;
 
@@ -63,7 +64,7 @@ async function qLoad(force) {
 /* Мои правки держатся на устройстве, пока облако их не догонит: мост пишет в заметку не мгновенно,
    и без этого после обновления страницы сделанное «воскресает». */
 function qMark(note, op, value) {
-  const f = { status: "status", basket: "basket", move: "folder" }[op];
+  const f = { status: "status", basket: "basket", move: "folder", rename: "title", text: "text" }[op];
   if (!f && op !== "step" && op !== "trash") return null;
   const p = qRead("bd-pending") || {}, cur = p[note.id] || {};
   if (f) cur[f] = value[f];
@@ -83,22 +84,48 @@ function qOverlay(notes) {
       && (f.status === undefined || n.status === f.status)
       && (f.basket === undefined || n.basket === f.basket)
       && (f.folder === undefined || n.folder === f.folder)
+      && (f.title === undefined || n.title === f.title)
+      && (f.text === undefined || (n.excerpt || "").trim() === f.text)
       && (f.stepsDone || []).every(i => n.steps?.[i]?.done);
     if (caught) { delete p[id]; dirty = true; continue; }
     if (f.status !== undefined) { n.status = f.status; if (f.doneAt) n.updated_at = f.doneAt; }
     if (f.basket !== undefined) n.basket = f.basket;
+    if (f.title !== undefined) n.title = f.title;
+    if (f.text !== undefined) n.excerpt = f.text;
     if (f.folder !== undefined) n.folder = f.folder;
     (f.stepsDone || []).forEach(i => { if (n.steps?.[i]) n.steps[i].done = true; });
   }
   if (dirty) qStore("bd-pending", p);
   return notes.filter(n => !(p[n.id] && p[n.id].trash));
 }
+function qUnmark(noteId, op) {
+  const p = qRead("bd-pending") || {}, cur = p[noteId]; if (!cur) return;
+  if (op === "rename") delete cur.title;
+  if (op === "text") delete cur.text;
+  if (Object.keys(cur).every(k => k === "at")) delete p[noteId];
+  qStore("bd-pending", p);
+}
+function qWatch(id, label, noteId, op) {
+  let tries = 0;
+  const tick = async () => {
+    if (++tries > 40) return;
+    const { data } = await sb.from("bd_changes").select("applied_at,error").eq("id", id).maybeSingle();
+    if (data && data.applied_at) {
+      if (data.error) { qUnmark(noteId, op); toast(`${label}: ${data.error}`); }
+      qLoad(true);
+      return;
+    }
+    setTimeout(tick, 5000);
+  };
+  setTimeout(tick, 5000);
+}
 function qChange(note, op, value) {
   if (!sb || !user) return;
   const at = qMark(note, op, value);
-  sb.from("bd_changes").insert({ user_id: user.id, note_id: note.id, op, value })
-    .then(({ error }) => {
-      if (!error) return;
+  const watch = op === "rename" ? "Название" : op === "text" ? "Описание" : null;
+  sb.from("bd_changes").insert({ user_id: user.id, note_id: note.id, op, value }).select("id").single()
+    .then(({ data, error }) => {
+      if (!error) { if (watch && data) qWatch(data.id, watch, note.id, op); return; }
       const p = qRead("bd-pending") || {};
       if (at && p[note.id] && p[note.id].at === at) { delete p[note.id]; qStore("bd-pending", p); }
       toast("Не ушло в Obsidian — проверь связь и повтори");
@@ -268,6 +295,7 @@ const QI = {
   bolt: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M9.2 1 3 9h4.3l-.8 6L13 7H8.6z" fill="currentColor"/></svg>',
   back: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5 3 7l3.5 3.5"/><path d="M3 7h7c1.7 0 3 1.3 3 3v0c0 1.7-1.3 3-3 3H7"/></svg>',
   star: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1.5 9.6 6.2 14.7 6.3 10.7 9.4 12.1 14.2 8 11.3 3.9 14.2 5.3 9.4 1.3 6.3 6.3 6.2Z" fill="currentColor"/></svg>',
+  pencil: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.8 2.8 13.2 5.2 5.4 13 2.5 13.5 3 10.6z"/><path d="m9.4 4.2 2.4 2.4"/></svg>',
   inbox: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h9"/><path d="m8 5 3 3-3 3"/><path d="M13 3v10"/></svg>',
 };
 
@@ -287,10 +315,20 @@ function qDetail(n) {
       </div>
     </div>`;
   }
+  if (Q.edit && Q.edit.id === n.id) {
+    return `<div class="q-detail">
+      <textarea class="q-text-edit" placeholder="Описание заметки">${qe(Q.edit.text)}</textarea>
+      ${Q.edit.err ? `<div class="q-hint q-err">${qe(Q.edit.err)}</div>` : `<div class="q-hint">Меняется только описание. Чек-лист и служебные строки не затрагиваются</div>`}
+      <div class="q-detail-acts">
+        <button class="q-soft sm" data-q-edit-save>Сохранить</button>
+        <button class="q-soft sm" data-q-edit-cancel>Отмена</button>
+      </div>
+    </div>`;
+  }
   if (Q.rename && Q.rename.id === n.id) {
     return `<div class="q-detail">
-      <input class="q-rename-edit" value="${qe(Q.rename.text)}">
-      <div class="q-hint">Файл в Obsidian переименуется вместе с заметкой</div>
+      <input class="q-rename-edit" value="${qe(Q.rename.text)}" maxlength="120" enterkeyhint="done">
+      ${Q.rename.err ? `<div class="q-hint q-err">${qe(Q.rename.err)}</div>` : `<div class="q-hint">Файл в Obsidian переименуется вместе с заметкой, ссылки на неё поправятся</div>`}
       <div class="q-detail-acts">
         <button class="q-soft sm" data-q-rename-save>Сохранить</button>
         <button class="q-soft sm" data-q-rename-cancel>Отмена</button>
@@ -299,9 +337,13 @@ function qDetail(n) {
   }
   const steps = n.steps || [];
   const text = (n.excerpt || "").trim();
-  const long = text.length >= 1490;
+  const long = text.length >= Q_DESC_CAP;
   return `<div class="q-detail">
-    ${text ? `<div class="q-text">${qe(text)}${long ? "…" : ""}</div>` : `<div class="q-text empty-t">В заметке нет текста — только название.</div>`}
+    <div class="q-d-title"><span>${qe(n.title)}</span><button class="q-ic" data-q-rename="${n.id}" title="Изменить название">${QI.pencil}</button></div>
+    <div class="q-text-wrap">
+    ${text ? `<div class="q-text" data-q-edit="${n.id}">${qe(text)}${long ? "…" : ""}</div>` : `<div class="q-text empty-t" data-q-edit="${n.id}">Описания нет. Нажми, чтобы добавить.</div>`}
+    <button class="q-ic q-text-pen" data-q-edit="${n.id}" title="Изменить описание">${QI.pencil}</button>
+    </div>
     ${steps.length ? `<div class="q-steps">${steps.map((s, i) => `
       <button class="q-step${s.done ? " done" : ""}" data-q-step="${n.id}:${i}" ${s.done ? "disabled" : ""}>
         <span class="q-box">${s.done ? QI.check : ""}</span><span>${qe(s.t)}</span>
@@ -310,7 +352,6 @@ function qDetail(n) {
       <span class="q-acts-left">
         <a class="q-link" href="${qObsidian(n)}">Открыть в Obsidian ${QI.out}</a>
         <button class="q-link" data-q-steps="${n.id}">${steps.length ? "Править чек-лист" : "Сделать чек-лист"}</button>
-        <button class="q-link" data-q-rename="${n.id}">Переименовать</button>
       </span>
       <span class="q-move-wrap"><small>Папка:</small><select class="q-move" data-q-move="${n.id}">${(n.folder && !Q_FOLDERS.includes(n.folder) ? [n.folder, ...Q_FOLDERS] : Q_FOLDERS).map(f => `<option value="${qe(f)}"${f === n.folder ? " selected" : ""}>${qe(f.replace(/\//g, " → "))}</option>`).join("")}</select></span>
     </div>
@@ -324,13 +365,39 @@ function qSetSteps(note, lines) {
   Q.steps = null; render();
   toast(items.length ? `Чек-лист: ${items.length} ${qPlural(items.length, "шаг", "шага", "шагов")}` : "Чек-лист убран");
 }
+function qTitleError(t) {
+  if (!t) return "Название не может быть пустым";
+  const bad = [...new Set(t.match(/[\\/:*?"<>|\[\]#^]/g) || [])];
+  if (bad.length) return `В названии нельзя символы: ${bad.join(" ")}. Запрещены: \\ / : * ? " < > | [ ] # ^`;
+  if (t[0] === ".") return "Название не может начинаться с точки";
+  if (t.endsWith(".")) return "Название не может заканчиваться точкой";
+  if (t.length > 120) return "Название длиннее 120 знаков";
+  return "";
+}
 function qRename(note, title) {
-  title = String(title || "").trim().replace(/[\\/:*?"<>|]/g, "").slice(0, 120);
-  if (!title || title === note.title) { Q.rename = null; return render(); }
+  title = String(title || "").trim().replace(/\.md$/i, "").trim();
+  if (title === note.title) { Q.rename = null; return render(); }
+  const err = qTitleError(title);
+  if (err) { Q.rename.err = err; return render(); }
+  if (Q.notes.some(x => x.id !== note.id && x.folder === note.folder && x.title.toLowerCase() === title.toLowerCase())) {
+    Q.rename.err = "Заметка с таким названием в этой папке уже есть"; return render();
+  }
   note.title = title;
   qChange(note, "rename", { title });
   Q.rename = null; render();
-  toast(`Название изменено: ${title}`);
+  toast("Название сохранено — файл в Obsidian переименуется в течение минуты");
+}
+function qSaveText(note, text) {
+  text = String(text || "").replace(/\r\n/g, "\n").split("\n").map(l => l.replace(/\s+$/, "")).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (text === (note.excerpt || "").trim()) { Q.edit = null; return render(); }
+  if (/^\s*##\s*Шаги\s*$/m.test(text)) { Q.edit.err = "В описании не может быть строки «## Шаги» — чек-лист правится отдельно"; return render(); }
+  if (text.startsWith("---")) { Q.edit.err = "Описание не может начинаться с «---»"; return render(); }
+  if (text.length >= Q_DESC_CAP) { Q.edit.err = `Текст длиннее ${Q_DESC_CAP} знаков — правь в Obsidian`; return render(); }
+  const base = note.excerpt || "";
+  note.excerpt = text;
+  qChange(note, "text", { text, base });
+  Q.edit = null; render();
+  toast("Описание сохранено — в Obsidian попадёт в течение минуты");
 }
 function qItemBasket(e) {
   const study = qStudy(e.note);
@@ -628,7 +695,7 @@ $("board").addEventListener("click", e => {
   if (Date.now() - (Q.swipedAt || 0) < 350) return;
   if (Q.swOpen && !e.target.closest(".q-under")) { qSwipeClose(); return; }
   Q.swOpen = null;
-  const b = e.target.closest("button"); if (!b) return;
+  const b = e.target.closest("button, .q-text[data-q-edit]"); if (!b) return;
   const d = b.dataset;
   if (d.qTab) { Q.tab = d.qTab; Q.award = null; Q.sel = null; return render(); }
   if (d.qTrash) return qTrash([d.qTrash]);
@@ -694,8 +761,23 @@ $("board").addEventListener("click", e => {
   }
   if (d.qRename) {
     const n = Q.notes.find(x => x.id === d.qRename); if (!n) return;
-    Q.rename = { id: n.id, text: n.title };
-    return render();
+    Q.rename = { id: n.id, text: n.title, err: "" }; Q.edit = null;
+    render(); const i = document.querySelector(".q-rename-edit"); if (i) { i.focus(); i.select(); }
+    return;
+  }
+  if (d.qEdit) {
+    const n = Q.notes.find(x => x.id === d.qEdit); if (!n) return;
+    if (window.getSelection && String(window.getSelection())) return;
+    if ((n.excerpt || "").length >= Q_DESC_CAP) return toast("Текст слишком длинный для правки здесь — открой в Obsidian");
+    Q.edit = { id: n.id, text: n.excerpt || "", err: "" }; Q.rename = null;
+    render(); const t = document.querySelector(".q-text-edit"); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+    return;
+  }
+  if (d.qEditCancel !== undefined) { Q.edit = null; return render(); }
+  if (d.qEditSave !== undefined) {
+    const note = Q.notes.find(x => x.id === (Q.edit || {}).id); if (!note) return;
+    const ta = document.querySelector(".q-text-edit");
+    return qSaveText(note, ta ? ta.value : "");
   }
   if (d.qRenameCancel !== undefined) { Q.rename = null; return render(); }
   if (d.qRenameSave !== undefined) {
@@ -715,6 +797,7 @@ $("board").addEventListener("click", e => {
 $("board").addEventListener("input", e => {
   if (e.target.classList.contains("q-steps-edit")) { if (Q.steps) Q.steps.text = e.target.value; return; }
   if (e.target.classList.contains("q-rename-edit")) { if (Q.rename) Q.rename.text = e.target.value; return; }
+  if (e.target.classList.contains("q-text-edit")) { if (Q.edit) Q.edit.text = e.target.value; return; }
   if (e.target.id !== "qSearch") return;
   Q.q = e.target.value; render();
 });
