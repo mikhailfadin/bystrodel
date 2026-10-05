@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "43";
+var APP_V = "44";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -238,7 +238,8 @@ input,textarea{font:inherit;color:inherit}
 .app{display:grid;grid-template-columns:272px 1fr;height:100vh}
 
 /* ---------- боковая панель ---------- */
-.side{background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:22px 16px;gap:22px;overflow:auto}
+.side{background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:22px 16px;gap:22px;overflow:auto;scrollbar-width:none}
+.side::-webkit-scrollbar{display:none}
 .brand{display:flex;align-items:center;gap:10px;padding:4px 8px;margin:-4px 0;border-radius:10px;color:inherit;text-decoration:none;align-self:flex-start}
 .brand:hover{background:var(--hover)}
 .brand b{font-size:22px;font-weight:700;letter-spacing:-.02em}
