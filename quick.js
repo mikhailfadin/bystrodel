@@ -3,7 +3,7 @@
 
 const Q = {
   notes: [], settings: null, loaded: false, loading: false, error: "", at: null,
-  tab: "basket", q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null, steps: null, rename: null, edit: null,
+  tab: (() => { try { const t = localStorage.getItem("bd-qtab"); return ["basket", "read", "remember", "done", "all"].includes(t) ? t : "all"; } catch { return "all"; } })(), q: "", open: {}, folds: {}, award: null, poll: null, hidden: new Set(), sel: null, steps: null, rename: null, edit: null,
 };
 const Q_ORDER = ["Новые", "Актуальное", "Быстрые", "В работе", "Задачи", "Не забыть", "Идеи", "Цели", "Полезные статьи", "Контент", "Гипотезы", "Разобрать", "Когда-нибудь"];
 const Q_FOLDERS = ["Бизнес/Задачи", "Бизнес/Идеи по бизнесу", "Бизнес/Гипотезы проектов", "Бизнес/Разобрать", "Бизнес/Изучение", "Цели (Бизнес)", "Не забыть", "WIKI (База)/Полезные материалы", "Контент/Идеи", "Контент/Сценарии"];
@@ -317,7 +317,8 @@ function qDetail(n) {
   }
   if (Q.edit && Q.edit.id === n.id) {
     return `<div class="q-detail">
-      <textarea class="q-text-edit" placeholder="Описание заметки">${qe(Q.edit.text)}</textarea>
+      <div class="q-text-wrap"><textarea class="q-text-edit" placeholder="Описание заметки">${qe(Q.edit.text)}</textarea>
+      <button class="q-ic q-text-ok" data-q-edit-save title="Принять правку">${QI.check}</button></div>
       ${Q.edit.err ? `<div class="q-hint q-err">${qe(Q.edit.err)}</div>` : `<div class="q-hint">Меняется только описание. Чек-лист и служебные строки не затрагиваются</div>`}
       <div class="q-detail-acts">
         <button class="q-soft sm" data-q-edit-save>Сохранить</button>
@@ -604,6 +605,7 @@ function qSide() {
     </div>`;
 }
 function renderQuick() {
+  try { localStorage.setItem("bd-qtab", Q.tab); } catch {}
   if ((!Q.loaded || (Q.error === "login" && typeof user !== "undefined" && user)) && !Q.loading) qLoad(true);
   if (!Q.poll) Q.poll = setInterval(() => { if (view.mode === "quick" && !document.hidden) qLoad(true); }, 60e3);
 
@@ -815,4 +817,4 @@ $("board").addEventListener("change", e => {
 document.addEventListener("keydown", e => { if (e.key === "Escape" && Q.sel && view.mode === "quick") { Q.sel = null; render(); } }, true);
 document.addEventListener("visibilitychange", () => { if (!document.hidden && view.mode === "quick") qLoad(); });
 setTimeout(() => { if (typeof user !== "undefined" && user && !Q.loaded) qLoad(); }, 4000);
-try { if (localStorage.getItem("bd-view") === "quick") go("quick", "quick"); } catch {}
+try { if (localStorage.getItem("bd-view") !== "tasks") go("quick", "quick"); } catch {}
