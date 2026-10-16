@@ -242,6 +242,18 @@ function qStar(note) {
   qChange(note, "status", { status: note.status });
   render(); toast(on ? `Убрал из актуальных: ${note.title}` : `В актуальное: ${note.title}`);
 }
+const Q_SOMEDAY = "__someday";
+function qSomeday(note) {
+  if (note.status === "когда-нибудь") return render();
+  note.status = "когда-нибудь"; note.updated_at = new Date().toISOString();
+  qChange(note, "status", { status: "когда-нибудь" });
+  render(); toast(`В «Когда-нибудь»: ${note.title}`);
+}
+function qWake(note) {
+  note.status = "новое"; note.updated_at = new Date().toISOString();
+  qChange(note, "status", { status: "новое" });
+  render(); toast(`Вернул в работу: ${note.title}`);
+}
 function qMove(note, folder) {
   if (!folder || folder === note.folder) return;
   note.folder = folder;
@@ -303,6 +315,75 @@ const qObsidian = n => `obsidian://open?vault=Obsidian&file=${encodeURIComponent
 const qStepsPrefill = n => (n.steps || []).length
   ? n.steps.map(s => s.t).join("\n")
   : (n.excerpt || "").split("\n").map(s => s.replace(/^\s*(?:[-—*•]|\d+[.)])\s+/, "").trim()).filter(Boolean).join("\n");
+/* ---------- картинки заметок: ![[имя.jpg]] → закрытый бакет vault, подписанная ссылка на час ---------- */
+const Q_IMG_RE = /!\[\[([^\[\]|#^\n]+?\.(?:jpe?g|png|webp))(?:[|#][^\]\n]*)?\]\]/gi;
+const qImgName = path => path.slice(path.lastIndexOf("/") + 1).trim(); // мост кладёт файлы плоско: в хранилище только имя без папки
+const qImgCache = new Map(); // имя → { url, exp } | { until } (до этого времени не повторяем запрос)
+const qImgWait = new Set();
+const qImgCap = name => `картинка: ${name}`;
+const qImgUrl = name => { const c = qImgCache.get(name); return c && c.url && c.exp > Date.now() ? c.url : null; };
+function qImgPicHtml(name, url) { return `<img class="q-img-pic" src="${qe(url)}" alt="${qe(name)}" decoding="async">`; }
+function qImgHtml(name) {
+  qImgFetch(name);
+  const url = qImgUrl(name);
+  return `<span class="q-img" data-q-img="${qe(name)}">${url ? qImgPicHtml(name, url) : qe(qImgCap(name))}</span>`;
+}
+function qImgFetch(name) {
+  const c = qImgCache.get(name);
+  if ((c && (c.exp > Date.now() || c.until > Date.now())) || qImgWait.has(name)) return;
+  if (typeof sb === "undefined" || !sb || typeof user === "undefined" || !user || !sb.storage) return;
+  qImgWait.add(name);
+  (async () => {
+    try {
+      const { data, error } = await sb.storage.from("vault").createSignedUrl(`${user.id}/${name}`, 3600);
+      if (error || !data || !data.signedUrl) throw new Error("no url");
+      qImgCache.set(name, { url: data.signedUrl, exp: Date.now() + 3000e3 });
+    } catch { qImgCache.set(name, { until: Date.now() + 60e3 }); }
+    qImgWait.delete(name);
+    qImgPaint(name);
+  })();
+}
+function qImgPaint(name) {
+  const url = qImgUrl(name);
+  if (!url) return;
+  document.querySelectorAll(".q-img[data-q-img]").forEach(el => {
+    if (el.dataset.qImg !== name || el.querySelector("img")) return;
+    el.innerHTML = qImgPicHtml(name, url);
+  });
+}
+// не загрузилось (ссылка протухла, файла нет) — вместо сломанной картинки спокойная подпись
+document.addEventListener("error", e => {
+  const im = e.target;
+  if (!im || !im.classList || !im.classList.contains("q-img-pic")) return;
+  const el = im.closest(".q-img"), name = el && el.dataset.qImg;
+  if (name) qImgCache.set(name, { until: Date.now() + 60e3 });
+  if (el) el.textContent = qImgCap(name);
+}, true);
+// текст заметки → HTML: обычный текст экранируется, ссылки на картинки становятся местом под картинку
+function qRich(text) {
+  let out = "", last = 0, afterImg = false;
+  for (const m of String(text).matchAll(Q_IMG_RE)) {
+    let before = text.slice(last, m.index);
+    if (afterImg) before = before.replace(/^[ \t]*\n/, "");
+    out += qe(before.replace(/\n[ \t]*$/, "")) + qImgHtml(qImgName(m[1]));
+    last = m.index + m[0].length; afterImg = true;
+  }
+  let rest = String(text).slice(last);
+  if (afterImg) rest = rest.replace(/^[ \t]*\n/, "");
+  return out + qe(rest);
+}
+function qLightbox(src, alt) {
+  const o = document.createElement("div");
+  o.className = "q-lightbox";
+  const im = document.createElement("img");
+  im.src = src; im.alt = alt || "";
+  o.appendChild(im);
+  const close = () => { o.remove(); window.removeEventListener("keydown", onKey, true); };
+  const onKey = e => { if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); close(); } };
+  o.addEventListener("click", close);
+  window.addEventListener("keydown", onKey, true);
+  document.body.appendChild(o);
+}
 function qDetail(n) {
   if (Q.steps && Q.steps.id === n.id) {
     return `<div class="q-detail">
@@ -342,7 +423,7 @@ function qDetail(n) {
   return `<div class="q-detail">
     <div class="q-d-title"><span>${qe(n.title)}</span><button class="q-ic" data-q-rename="${n.id}" title="Изменить название">${QI.pencil}</button></div>
     <div class="q-text-wrap">
-    ${text ? `<div class="q-text" data-q-edit="${n.id}">${qe(text)}${long ? "…" : ""}</div>` : `<div class="q-text empty-t" data-q-edit="${n.id}">Описания нет. Нажми, чтобы добавить.</div>`}
+    ${text ? `<div class="q-text" data-q-edit="${n.id}">${qRich(text)}${long ? "…" : ""}</div>` : `<div class="q-text empty-t" data-q-edit="${n.id}">Описания нет. Нажми, чтобы добавить.</div>`}
     <button class="q-ic q-text-pen" data-q-edit="${n.id}" title="Изменить описание">${QI.pencil}</button>
     </div>
     ${steps.length ? `<div class="q-steps">${steps.map((s, i) => `
@@ -353,8 +434,9 @@ function qDetail(n) {
       <span class="q-acts-left">
         <a class="q-link" href="${qObsidian(n)}">Открыть в Obsidian ${QI.out}</a>
         <button class="q-link" data-q-steps="${n.id}">${steps.length ? "Править чек-лист" : "Сделать чек-лист"}</button>
+        ${n.status === "когда-нибудь" ? `<button class="q-link" data-q-wake="${n.id}">${QI.back}<span>Вернуть в работу</span></button>` : ""}
       </span>
-      <span class="q-move-wrap"><small>Папка:</small><select class="q-move" data-q-move="${n.id}">${(n.folder && !Q_FOLDERS.includes(n.folder) ? [n.folder, ...Q_FOLDERS] : Q_FOLDERS).map(f => `<option value="${qe(f)}"${f === n.folder ? " selected" : ""}>${qe(f.replace(/\//g, " → "))}</option>`).join("")}</select></span>
+      <span class="q-move-wrap"><small>Папка:</small><select class="q-move" data-q-move="${n.id}">${(n.folder && !Q_FOLDERS.includes(n.folder) ? [n.folder, ...Q_FOLDERS] : Q_FOLDERS).map(f => `<option value="${qe(f)}"${f === n.folder ? " selected" : ""}>${qe(f.replace(/\//g, " → "))}</option>`).join("")}<option disabled>──────────</option><option value="${Q_SOMEDAY}">Когда-нибудь</option></select></span>
     </div>
   </div>`;
 }
@@ -464,13 +546,15 @@ function qItemPlain(n, { cls = "", meta = "", shelf = false } = {}) {
     : article ? `<button class="q-pick${n.read ? " reading" : ""}" data-q-read="${n.id}">${n.read ? "Не изучаю" : "Изучить"}</button>`
     : `<button class="q-pick" data-q-toggle="${n.id}">${n.basket ? "В работе" : "В работу"}</button>`;
   const canStudy = qStudy(n) && n.status !== "изучено";
+  const someday = n.status === "когда-нибудь";
   return `<div class="q-row${inB ? " picked" : ""}${open ? " open" : ""}${cls ? " " + cls : ""}">
     <div class="q-swipe" data-note="${n.id}">
       <div class="q-under">
-        ${canStudy ? `<button class="q-under-b q-study" data-q-done="${n.id}">${QI.book}<span>Изучил</span></button>` : ""}
+        ${someday ? `<button class="q-under-b q-wake" data-q-wake="${n.id}">${QI.back}<span>Вернуть в работу</span></button>` : ""}
+        ${someday ? "" : `${canStudy ? `<button class="q-under-b q-study" data-q-done="${n.id}">${QI.book}<span>Изучил</span></button>` : ""}
         ${n.status === "изучено" ? "" : `<button class="q-under-b q-take" data-q-toggle="${n.id}">${n.basket ? QI.minus : QI.bolt}<span>${n.basket ? "Из работы" : "В работу"}</span></button>`}
         ${qIsDone(n) ? "" : `<button class="q-under-b q-star" data-q-star="${n.id}">${QI.star}<span>${n.status === "актуальное" ? "Из актуальных" : "В актуальное"}</span></button>`}
-        <button class="q-under-b q-read" data-q-read="${n.id}">${QI.book}<span>${n.read ? "Не изучаю" : "Изучить"}</span></button>
+        <button class="q-under-b q-read" data-q-read="${n.id}">${QI.book}<span>${n.read ? "Не изучаю" : "Изучить"}</span></button>`}
         <button class="q-under-b q-del" data-q-trash="${n.id}">${QI.x}<span>Удалить</span></button>
       </div>
       <div class="q-line">
@@ -478,7 +562,7 @@ function qItemPlain(n, { cls = "", meta = "", shelf = false } = {}) {
           <span class="q-t"><b>${qe(n.title)}</b><span>${meta}</span>${n.quick ? `<span class="q-quick-tag">быстрое дело</span>` : ""}</span>
           <span class="q-chev${open ? " open" : ""}">${QI.chev}</span>
         </button>
-        <div class="q-row-side">${pick}${qIsDone(n) ? "" : `<button class="q-ic" data-q-star="${n.id}" title="${n.status === "актуальное" ? "Убрать из актуальных" : "В актуальное"}">${QI.star}</button>`}${canStudy ? `<button class="q-ic${shelf ? "" : " desk"}" data-q-done="${n.id}" title="Изучил — останется в «Полезных статьях»">${QI.book}</button>` : ""}${!article && !qIsDone(n) ? `<button class="q-ic" data-q-done="${n.id}" title="Сделал — уйдёт в «Сделано»">${QI.check}</button>` : ""}<button class="q-ic danger desk" data-q-trash="${n.id}" title="Удалить в корзину">${QI.x}</button></div>
+        <div class="q-row-side">${pick}${n.status === "когда-нибудь" ? `<button class="q-ic" data-q-wake="${n.id}" title="Вернуть в работу">${QI.back}</button>` : ""}${qIsDone(n) ? "" : `<button class="q-ic" data-q-star="${n.id}" title="${n.status === "актуальное" ? "Убрать из актуальных" : "В актуальное"}">${QI.star}</button>`}${canStudy ? `<button class="q-ic${shelf ? "" : " desk"}" data-q-done="${n.id}" title="Изучил — останется в «Полезных статьях»">${QI.book}</button>` : ""}${!article && !qIsDone(n) ? `<button class="q-ic" data-q-done="${n.id}" title="Сделал — уйдёт в «Сделано»">${QI.check}</button>` : ""}<button class="q-ic danger desk" data-q-trash="${n.id}" title="Удалить в корзину">${QI.x}</button></div>
       </div>
     </div>
     ${open ? qDetail(n) : ""}
@@ -697,6 +781,7 @@ $("board").addEventListener("click", e => {
   if (Date.now() - (Q.swipedAt || 0) < 350) return;
   if (Q.swOpen && !e.target.closest(".q-under")) { qSwipeClose(); return; }
   Q.swOpen = null;
+  const pic = e.target.closest(".q-img-pic"); if (pic) { qLightbox(pic.src, pic.alt); return; }
   const b = e.target.closest("button, .q-text[data-q-edit]"); if (!b) return;
   const d = b.dataset;
   if (d.qTab) { Q.tab = d.qTab; Q.award = null; Q.sel = null; return render(); }
@@ -748,6 +833,7 @@ $("board").addEventListener("click", e => {
     return render();
   }
   if (d.qUndone) { const n = Q.notes.find(x => x.id === d.qUndone); return n && qUndone(n); }
+  if (d.qWake) { const n = Q.notes.find(x => x.id === d.qWake); return n && qWake(n); }
   if (d.qStar) { const n = Q.notes.find(x => x.id === d.qStar); return n && qStar(n); }
   if (d.qSteps) {
     const n = Q.notes.find(x => x.id === d.qSteps); if (!n) return;
@@ -812,7 +898,9 @@ $("board").addEventListener("keydown", e => {
 $("board").addEventListener("change", e => {
   if (e.target.dataset.qMove === undefined) return;
   const n = Q.notes.find(x => x.id === e.target.dataset.qMove);
-  if (n) qMove(n, e.target.value);
+  if (!n) return;
+  if (e.target.value === Q_SOMEDAY) return qSomeday(n);
+  qMove(n, e.target.value);
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && Q.sel && view.mode === "quick") { Q.sel = null; render(); } }, true);
 document.addEventListener("visibilitychange", () => { if (!document.hidden && view.mode === "quick") qLoad(); });
