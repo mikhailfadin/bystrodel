@@ -2,19 +2,23 @@
 // Данные живут на устройстве (localStorage) и работают без интернета.
 // Каждое сохранение сверяется с тем, что уже ушло в облако; изменённое и удалённое догоняет базу.
 // С базы приходят изменения других устройств и мака; при споре побеждает более поздняя правка.
+// Время правки ставит само устройство, а оно может прислать правку позже, чем её сделало (телефон спал, не было сети).
+// Поэтому быстрая загрузка «только новее метки» дополняется полной сверкой с базой: при открытии и раз в FULL_EVERY.
+// Очистка архива (метки удаления со временем «сейчас») идёт только после успешной полной сверки, иначе она перебьёт чужую правку.
 
 const SUPA_URL = "https://yqumtlykftuxswbhnfru.supabase.co";
 const SUPA_KEY = "sb_publishable_swH79jNgc-iQc04BGmSldw_3n9na-Uy";
 
 let sb = null, user = null;
 const nowIso = () => new Date().toISOString();
+const FULL_EVERY = 5 * 60e3;
 const syncStatus = s => window.onSyncStatus?.(s);
 
 // одна таблица: подписи записей, отправка изменённого и удалённого, загрузка чужих правок
 function makeSync(o) {
   const blank = () => ({ lastPull: null, sent: {}, dead: {} });
   let st; try { st = Object.assign(blank(), JSON.parse(localStorage.getItem(o.ls))); } catch { st = blank(); }
-  let sigs = {}, pushing = false, pulling = false, timer = null;
+  let sigs = {}, pushing = false, pulling = false, timer = null, lastFull = 0;
   const sig = x => JSON.stringify(o.fields.map(f => x[f] ?? null));
   const persist = () => { try { localStorage.setItem(o.ls, JSON.stringify(st)); } catch {} };
   const pending = () => o.list().filter(x => !x.sample && st.sent[x.id] !== sig(x));
@@ -57,11 +61,13 @@ function makeSync(o) {
     if (pending().length) schedule();
   }
 
-  async function pull() {
+  async function pull(full) {
     if (!sb || !user || pulling || !navigator.onLine) return;
     pulling = true;
     try {
-      const since = st.lastPull ? new Date(Date.parse(st.lastPull) - 5 * 60e3).toISOString() : null;
+      // полная сверка: без «новее метки» берём из базы всё. Первая загрузка после открытия — всегда полная.
+      full = full || Date.now() - lastFull > FULL_EVERY;
+      const since = !full && st.lastPull ? new Date(Date.parse(st.lastPull) - 5 * 60e3).toISOString() : null;
       const list = o.list();
       let touched = false;
       for (let from = 0; ; from += 1000) {
@@ -86,8 +92,10 @@ function makeSync(o) {
         }
         if (data.length < 1000) break;
       }
+      if (full) lastFull = Date.now();
       persist();
       if (touched) o.changed();
+      if (full) o.afterFull?.();
     } catch (e) { console.warn(`синхронизация ${o.table}: загрузка`, e); syncStatus("error"); }
     pulling = false;
   }
@@ -103,6 +111,7 @@ const taskSync = makeSync({
   deadRow: { title: "", date: "inbox", time: "", prio: false, done: false, done_at: null, pos: 0, carry: 0, note: "" },
   fromRow: r => ({ title: r.title, date: r.date, time: r.time || "", prio: r.prio, done: r.done, doneAt: r.done_at, pos: r.pos, carry: r.carry, note: r.note || "" }),
   changed: () => { save(); render(); },
+  afterFull: () => { if (window.purgeArchive?.()) render(); }, // очистка архива — только после полной сверки с облаком
 });
 
 const entrySync = makeSync({
@@ -119,7 +128,7 @@ const entrySync = makeSync({
 function onTasksSaved() { taskSync.saved(); }
 function onEntriesSaved() { entrySync.saved(); }
 async function pushPending() { await taskSync.push(); await entrySync.push(); }
-async function pullChanges() { await taskSync.pull(); await entrySync.pull(); }
+async function pullChanges(full) { await taskSync.pull(full); await entrySync.pull(full); }
 
 // первый вход на устройстве: примеры убираем, своё отправляем, облачное забираем
 async function firstSync() {

@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "46";
+var APP_V = "47";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -1075,7 +1075,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
 <div class="drag-badge" id="dragBadge" aria-hidden="true"><b>1</b></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="sync.js?v=4"></script>
+<script src="sync.js?v=5"></script>
 <script>
 const LS = "takt-mock-v1";
 const pad = n => String(n).padStart(2, "0");
@@ -1091,7 +1091,8 @@ const archived = () => tasks.filter(x => x.date === INBOX && x.done).sort((a, b)
 function purgeArchive() {
   const edge = Date.now() - ARCHIVE_DAYS * 864e5, before = tasks.length;
   tasks = tasks.filter(x => !(x.date === INBOX && x.done && x.doneAt && Date.parse(x.doneAt) < edge));
-  if (tasks.length !== before) save();
+  if (tasks.length === before) return false;
+  save(); return true;
 }
 const MQ = matchMedia("(max-width: 760px)");
 const isMobile = () => MQ.matches;
@@ -2083,11 +2084,9 @@ setInterval(() => {
   if (m !== lastMin) { lastMin = m; if (!$("dayPanel").hidden && !dpEdit) paintDay(); }
 }, 1000);
 
-purgeArchive();
-setInterval(purgeArchive, 36e5);
+if (typeof initCloud === "function") initCloud();
 render();
 paintFbar();
-if (typeof initCloud === "function") initCloud();
 </script>
 <script src="quick.js?v=32"></script>
 </body>
