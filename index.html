@@ -551,6 +551,8 @@ h1{margin:0;font-size:40px;line-height:1.05;font-weight:600;letter-spacing:-.025
 .clist .mrow .nm{font-weight:500;font-size:16px}
 .clist .mrow .k{margin-left:auto;font:12px var(--mono);color:var(--mute)}
 .clist .mrow.src .nm{color:var(--dim)}
+.clist .mrow.past .nm{color:var(--mute)}
+.clist .mrow .k{white-space:nowrap}
 #copyGo{margin-bottom:6px}
 
 .mdock{display:none}
@@ -1697,15 +1699,17 @@ function openCopy(id) {
   $("scrim").hidden = false; $("copySheet").hidden = false;
   $("copyList").scrollTop = 0;
 }
-function copyQuick(n) { // дни текущей недели, кроме того, где задача уже стоит
+function copyQuick(n) { // только вперёд от сегодня и без дня, где задача уже стоит; в открытой неделе пусто — берём следующую
   const x = tasks.find(k => k.id === copyId);
-  return copyWeek.slice(0, n).filter(d => d !== x?.date);
+  const ok = d => d >= TODAY && d !== x?.date;
+  const cur = copyWeek.slice(0, n).filter(ok);
+  return cur.length ? cur : copyWeek.slice(7, 7 + n).filter(ok);
 }
 function paintCopy() {
   const x = tasks.find(k => k.id === copyId); if (!x) return;
   const row = d => {
     const dt = parse(d), on = copySel.has(d);
-    return `<div class="mrow${on ? " on" : ""}${x.date === d ? " src" : ""}" data-cd="${d}"><span class="box"><svg width="13" viewBox="0 0 14 14" fill="none" stroke="var(--on-accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.4l2.8 2.8L11 4.6"/></svg></span><span class="nm">${CP_WD[(dt.getDay() + 6) % 7]} ${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}</span><span class="k">${[d === TODAY ? "сегодня" : "", x.date === d ? "здесь уже есть" : ""].filter(Boolean).join(" · ")}</span></div>`;
+    return `<div class="mrow${on ? " on" : ""}${x.date === d ? " src" : ""}${d < TODAY ? " past" : ""}" data-cd="${d}"><span class="box"><svg width="13" viewBox="0 0 14 14" fill="none" stroke="var(--on-accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.4l2.8 2.8L11 4.6"/></svg></span><span class="nm">${CP_WD[(dt.getDay() + 6) % 7]} ${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}</span><span class="k">${[d === TODAY ? "сегодня" : "", d < TODAY ? "прошёл" : "", x.date === d ? "здесь уже есть" : ""].filter(Boolean).join(" · ")}</span></div>`;
   };
   $("copyList").innerHTML = `<div class="cs-h">Эта неделя</div>` + copyWeek.slice(0, 7).map(row).join("") + `<div class="cs-h">Следующая неделя</div>` + copyWeek.slice(7).map(row).join("");
   const eq = a => a.length === copySel.size && a.every(d => copySel.has(d));
