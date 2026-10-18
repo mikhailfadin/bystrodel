@@ -1025,7 +1025,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
 <div class="modal" id="copySheet" hidden>
   <h3 id="copyTitle">Копировать</h3>
   <div class="sub2" id="copySub"></div>
-  <div class="cq"><button data-q="wd">Пн–Пт</button><button data-q="all">Все 7 дней</button></div>
+  <div class="cq"><button data-q="wd">5 рабочих дней</button><button data-q="all">7 дней подряд</button></div>
   <div class="clist" id="copyList"></div>
   <button class="go" id="copyGo" disabled>Скопировать (0)</button>
   <button class="ghost-btn" data-close>Отмена</button>
@@ -1691,7 +1691,7 @@ function copyTaskTo(task, dates) {
 function openCopy(id) {
   const x = tasks.find(k => k.id === id); if (!x) return;
   copyId = id; copySel = new Set();
-  const ws = weekStart(isBucket(view.date) ? TODAY : view.date);
+  const ws = isBucket(view.date) || view.date < TODAY ? weekStart(TODAY) : weekStart(view.date); // прошедшие недели не показываем: список начинается с текущей
   copyWeek = Array.from({ length: 14 }, (_, i) => addDays(ws, i));
   $("copyTitle").textContent = `Копировать «${x.title.length > 50 ? x.title.slice(0, 48) + "…" : x.title}»`;
   $("copySub").textContent = !isBucket(x.date) && x.time ? x.time : "без времени";
@@ -1699,11 +1699,15 @@ function openCopy(id) {
   $("scrim").hidden = false; $("copySheet").hidden = false;
   $("copyList").scrollTop = 0;
 }
-function copyQuick(n) { // только вперёд от сегодня и без дня, где задача уже стоит; в открытой неделе пусто — берём следующую
+function copyQuick(n) { // n=5: ближайшие 5 рабочих дней, n=7: 7 дней подряд; от сегодня (в будущей неделе — от её начала), через границу недели, без дня, где задача уже стоит
   const x = tasks.find(k => k.id === copyId);
-  const ok = d => d >= TODAY && d !== x?.date;
-  const cur = copyWeek.slice(0, n).filter(ok);
-  return cur.length ? cur : copyWeek.slice(7, 7 + n).filter(ok);
+  const from = copyWeek.filter(d => d >= TODAY), out = [];
+  for (const d of from) {
+    if (n === 5 ? out.length >= 5 : d > addDays(from[0], 6)) break;
+    if (n === 5 && (parse(d).getDay() + 6) % 7 > 4) continue;
+    out.push(d);
+  }
+  return out.filter(d => d !== x?.date);
 }
 function paintCopy() {
   const x = tasks.find(k => k.id === copyId); if (!x) return;
@@ -1711,7 +1715,7 @@ function paintCopy() {
     const dt = parse(d), on = copySel.has(d);
     return `<div class="mrow${on ? " on" : ""}${x.date === d ? " src" : ""}${d < TODAY ? " past" : ""}" data-cd="${d}"><span class="box"><svg width="13" viewBox="0 0 14 14" fill="none" stroke="var(--on-accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.4l2.8 2.8L11 4.6"/></svg></span><span class="nm">${CP_WD[(dt.getDay() + 6) % 7]} ${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}</span><span class="k">${[d === TODAY ? "сегодня" : "", d < TODAY ? "прошёл" : "", x.date === d ? "здесь уже есть" : ""].filter(Boolean).join(" · ")}</span></div>`;
   };
-  $("copyList").innerHTML = `<div class="cs-h">Эта неделя</div>` + copyWeek.slice(0, 7).map(row).join("") + `<div class="cs-h">Следующая неделя</div>` + copyWeek.slice(7).map(row).join("");
+  $("copyList").innerHTML = `<div class="cs-h">${copyWeek[0] === weekStart(TODAY) ? "Эта неделя" : "Неделя с " + parse(copyWeek[0]).getDate() + " " + parse(copyWeek[0]).toLocaleDateString("ru-RU", { month: "short" })}</div>` + copyWeek.slice(0, 7).map(row).join("") + `<div class="cs-h">${copyWeek[0] === weekStart(TODAY) ? "Следующая неделя" : "Неделя с " + parse(copyWeek[7]).getDate() + " " + parse(copyWeek[7]).toLocaleDateString("ru-RU", { month: "short" })}</div>` + copyWeek.slice(7).map(row).join("");
   const eq = a => a.length === copySel.size && a.every(d => copySel.has(d));
   document.querySelector('#copySheet [data-q="wd"]').classList.toggle("on", eq(copyQuick(5)));
   document.querySelector('#copySheet [data-q="all"]').classList.toggle("on", eq(copyQuick(7)));
