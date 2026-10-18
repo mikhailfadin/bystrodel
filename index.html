@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "47";
+var APP_V = "48";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -539,6 +539,19 @@ h1{margin:0;font-size:40px;line-height:1.05;font-weight:600;letter-spacing:-.025
 .moves button:disabled{opacity:.4;cursor:default}
 .moves .k{font:12px var(--mono);color:var(--mute)}
 .ghost-btn{height:48px;border-radius:24px;color:var(--dim);font-weight:500;flex:none}
+/* копировать задачу на другие дни */
+.cq{display:flex;gap:8px;margin-bottom:10px;flex:none}
+.cq button{flex:1;height:48px;border-radius:14px;background:var(--bg);font-weight:600;font-size:16px;color:var(--text)}
+.cq button.on{background:var(--accent-soft);color:var(--accent)}
+.clist{display:flex;flex-direction:column;margin:0 -6px 12px;padding:0 6px;flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--mute) transparent}
+.clist .cs-h{font:12px var(--mono);color:var(--mute);padding:10px 10px 4px;text-transform:uppercase;letter-spacing:.04em}
+.clist .mrow{min-height:48px;padding:6px 10px;gap:14px}
+.clist .mrow .box{width:28px;height:28px;border-radius:8px}
+.clist .mrow .box svg{width:15px}
+.clist .mrow .nm{font-weight:500;font-size:16px}
+.clist .mrow .k{margin-left:auto;font:12px var(--mono);color:var(--mute)}
+.clist .mrow.src .nm{color:var(--dim)}
+#copyGo{margin-bottom:6px}
 
 .mdock{display:none}
 .task{-webkit-touch-callout:none}
@@ -978,6 +991,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
   <button class="frow" id="edPrioRow"><span>Приоритетная</span><span class="sw" id="edPrio"></span></button>
   <div class="hint">Приоритетные стоят выше остальных и выделены крупнее. Остальные выстраиваются по времени.</div>
   <button class="frow" id="edToStore"><span>В хранилище</span><b>›</b></button>
+  <button class="frow" id="edCopy"><span>Копировать на другие дни</span><b>›</b></button>
   <div class="spent" id="edSpent" hidden><span>Потрачено</span><b id="edSpentVal"></b></div>
 
   <div class="actions">
@@ -1003,6 +1017,15 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
   <div class="sub2" id="moveSub"></div>
   <div class="moves" id="moves"></div>
   <div class="carry-cal" id="moveCal" hidden></div>
+  <button class="ghost-btn" data-close>Отмена</button>
+</div>
+
+<div class="modal" id="copySheet" hidden>
+  <h3 id="copyTitle">Копировать</h3>
+  <div class="sub2" id="copySub"></div>
+  <div class="cq"><button data-q="wd">Пн–Пт</button><button data-q="all">Все 7 дней</button></div>
+  <div class="clist" id="copyList"></div>
+  <button class="go" id="copyGo" disabled>Скопировать (0)</button>
   <button class="ghost-btn" data-close>Отмена</button>
 </div>
 
@@ -1374,6 +1397,7 @@ function openCard(id, prefill = "") {
   $("edNote").value = x?.note || "";
   $("edDel").hidden = !x;
   $("edToStore").hidden = !x;
+  $("edCopy").hidden = !x;
   const spent = x ? spentOn(x.id) : 0;
   $("edSpent").hidden = !spent; $("edSpentVal").textContent = spent ? dur(spent) : "";
   closePops();
@@ -1531,7 +1555,7 @@ $("carryGo").onclick = () => {
   save(); closeAll(); render(); toast(`Перенесено: ${n} → ${rel(to)}`);
 };
 
-function closeAll() { $("scrim").hidden = true; $("drawer").hidden = true; $("carryModal").hidden = true; $("moveSheet").hidden = true; $("acctSheet").hidden = true; $("dayPanel").hidden = true; $("digestModal").hidden = true; dpEdit = null; editId = null; draft = null; closeMenu(); }
+function closeAll() { $("scrim").hidden = true; $("drawer").hidden = true; $("carryModal").hidden = true; $("moveSheet").hidden = true; $("copySheet").hidden = true; $("acctSheet").hidden = true; $("dayPanel").hidden = true; $("digestModal").hidden = true; dpEdit = null; editId = null; draft = null; closeMenu(); }
 
 /* ---------- перетаскивание ----------
    порядок меняют только задачи без времени (время главнее);
@@ -1628,7 +1652,8 @@ function openMove(id) {
   $("moveSub").textContent = x.title.length > 70 ? x.title.slice(0, 68) + "…" : x.title;
   const opts = [[INBOX, "Входящие"], [TODAY, "Сегодня"], [addDays(TODAY, 1), "Завтра"], [SOMEDAY, "Когда-нибудь"]];
   $("moves").innerHTML = `<button data-move="focus" class="to-focus"><span>▶ В Такт</span><span class="k">пойдёт время</span></button>` + opts.map(([d, l]) => `<button data-move="${d}" ${x.date === d ? "disabled" : ""}><span>${l}</span><span class="k">${x.date === d ? "сейчас здесь" : isBucket(d) ? "" : parse(d).getDate() + " " + parse(d).toLocaleDateString("ru-RU", { month: "short" })}</span></button>`).join("")
-    + `<button data-move="pick"><span>Выбрать день…</span><span class="k">календарь</span></button>`;
+    + `<button data-move="pick"><span>Выбрать день…</span><span class="k">календарь</span></button>`
+    + `<button data-move="copy"><span>Копировать…</span><span class="k">на другие дни</span></button>`;
   $("moveCal").hidden = true;
   $("scrim").hidden = false; $("moveSheet").hidden = false;
 }
@@ -1636,6 +1661,7 @@ $("moves").addEventListener("click", e => {
   const b = e.target.closest("[data-move]"); if (!b || b.disabled) return;
   const x = tasks.find(k => k.id === moveId);
   if (b.dataset.move === "focus") { closeAll(); return focusStartTask(x); }
+  if (b.dataset.move === "copy") { closeAll(); return openCopy(x.id); }
   if (b.dataset.move === "pick") {
     $("moveCal").hidden = false;
     picker($("moveCal"), { value: isBucket(x.date) ? null : x.date, big: true, onPick: d => { closeAll(); moveTask(x, d); } });
@@ -1643,6 +1669,73 @@ $("moves").addEventListener("click", e => {
   }
   closeAll(); moveTask(x, b.dataset.move);
 });
+
+/* ---------- копирование задачи на другие дни ---------- */
+const CP_WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+let copyId = null, copySel = new Set(), copyWeek = [];
+function copyTaskTo(task, dates) {
+  const stamp = new Date().toISOString(), made = [];
+  for (const date of dates) {
+    made.push({ id: uid(), title: task.title, date, time: task.time || "", prio: !!task.prio, note: task.note || "", done: false, doneAt: null, pos: Math.max(-1, ...onDate(date).map(k => k.pos)) + 1, carry: 0, updatedAt: stamp });
+    tasks.push(made[made.length - 1]);
+  }
+  const ids = new Set(made.map(k => k.id));
+  save(); render();
+  toastUndo(`Скопировано на ${made.length} дн.`, () => {
+    tasks = tasks.filter(k => !ids.has(k.id)); save(); render(); toast("Копирование отменено");
+  });
+  return made;
+}
+function openCopy(id) {
+  const x = tasks.find(k => k.id === id); if (!x) return;
+  copyId = id; copySel = new Set();
+  const ws = weekStart(isBucket(view.date) ? TODAY : view.date);
+  copyWeek = Array.from({ length: 14 }, (_, i) => addDays(ws, i));
+  $("copyTitle").textContent = `Копировать «${x.title.length > 50 ? x.title.slice(0, 48) + "…" : x.title}»`;
+  $("copySub").textContent = !isBucket(x.date) && x.time ? x.time : "без времени";
+  paintCopy();
+  $("scrim").hidden = false; $("copySheet").hidden = false;
+  $("copyList").scrollTop = 0;
+}
+function copyQuick(n) { // дни текущей недели, кроме того, где задача уже стоит
+  const x = tasks.find(k => k.id === copyId);
+  return copyWeek.slice(0, n).filter(d => d !== x?.date);
+}
+function paintCopy() {
+  const x = tasks.find(k => k.id === copyId); if (!x) return;
+  const row = d => {
+    const dt = parse(d), on = copySel.has(d);
+    return `<div class="mrow${on ? " on" : ""}${x.date === d ? " src" : ""}" data-cd="${d}"><span class="box"><svg width="13" viewBox="0 0 14 14" fill="none" stroke="var(--on-accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.4l2.8 2.8L11 4.6"/></svg></span><span class="nm">${CP_WD[(dt.getDay() + 6) % 7]} ${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}</span><span class="k">${[d === TODAY ? "сегодня" : "", x.date === d ? "здесь уже есть" : ""].filter(Boolean).join(" · ")}</span></div>`;
+  };
+  $("copyList").innerHTML = `<div class="cs-h">Эта неделя</div>` + copyWeek.slice(0, 7).map(row).join("") + `<div class="cs-h">Следующая неделя</div>` + copyWeek.slice(7).map(row).join("");
+  const eq = a => a.length === copySel.size && a.every(d => copySel.has(d));
+  document.querySelector('#copySheet [data-q="wd"]').classList.toggle("on", eq(copyQuick(5)));
+  document.querySelector('#copySheet [data-q="all"]').classList.toggle("on", eq(copyQuick(7)));
+  $("copyGo").textContent = `Скопировать (${copySel.size})`;
+  $("copyGo").disabled = !copySel.size;
+}
+$("copyList").addEventListener("click", e => {
+  const r = e.target.closest("[data-cd]"); if (!r) return;
+  const d = r.dataset.cd; copySel.has(d) ? copySel.delete(d) : copySel.add(d);
+  const top = $("copyList").scrollTop; paintCopy(); $("copyList").scrollTop = top;
+});
+$("copySheet").addEventListener("click", e => {
+  const q = e.target.closest("[data-q]"); if (!q) return;
+  const a = copyQuick(q.dataset.q === "wd" ? 5 : 7);
+  const same = a.length === copySel.size && a.every(d => copySel.has(d));
+  copySel = same ? new Set() : new Set(a);
+  const top = $("copyList").scrollTop; paintCopy(); $("copyList").scrollTop = top;
+});
+$("copyGo").onclick = () => {
+  const x = tasks.find(k => k.id === copyId); if (!x || !copySel.size) return;
+  const dates = copyWeek.filter(d => copySel.has(d));
+  closeAll(); copyTaskTo(x, dates);
+};
+$("edCopy").onclick = () => {
+  const id = editId; if (!id) return;
+  dismiss(); // сохраняет правки карточки и закрывает её
+  openCopy(id);
+};
 
 /* ---------- добавление в конкретный день недели ---------- */
 $("board").addEventListener("keydown", e => {
