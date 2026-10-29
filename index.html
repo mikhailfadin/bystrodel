@@ -325,7 +325,7 @@ h1{margin:0;font-size:40px;line-height:1.05;font-weight:600;letter-spacing:-.025
 .task.drop-after{box-shadow:inset 0 -3px 0 var(--accent),var(--shadow)}
 .chk{position:relative;width:26px;height:26px;border-radius:50%;background:var(--check-empty);display:grid;place-items:center;margin-top:-1px;transition:background .15s,transform .15s}
 .chk::after{content:"";position:absolute;inset:-11px}
-.day .chk::after{inset:-14px}
+.day .chk::after{inset:-14px -8px -14px -14px}
 .chk::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--todo);transform:scale(0);pointer-events:none}
 .chk:hover{background:var(--accent-soft);transform:scale(1.06)}
 .chk svg{position:relative;grid-area:1/1;opacity:0}
@@ -340,6 +340,7 @@ h1{margin:0;font-size:40px;line-height:1.05;font-weight:600;letter-spacing:-.025
 .task.holding .chk svg.cx path{stroke:#fff}
 .task.holding .chk svg.ck{opacity:0}
 .nf{color:var(--todo)}
+.day .day-h span.nf,.day.today .day-h span.nf{color:var(--todo)}
 .title{overflow-wrap:anywhere;padding-top:2px}
 .task.prio .title{font-size:17.5px;font-weight:650;letter-spacing:-.01em;padding-top:0}
 .task.done .title{color:var(--done);text-decoration:line-through;text-decoration-color:var(--mute);font-weight:400;font-size:15px}
@@ -1670,8 +1671,12 @@ function moveTask(x, to) {
 /* ---------- долгое нажатие на телефоне: куда перенести ---------- */
 let lp = null, lpFired = null, moveId = null; // lpFired: "move" — открыт лист переноса, "fail" — поставлен ✗; глотает следующий click
 const HOLD_MOVE = 450, HOLD_FAIL = 500;
-// зона отметки: на телефоне левые 72px строки, на компьютере кружок с запасом до 48px (запас — псевдоэлемент .chk::after)
-const inFailZone = (e, el) => isMobile() ? e.clientX - el.getBoundingClientRect().left < 72 : !!e.target.closest(".chk");
+// зона удержания ✗ — прямоугольник вокруг кружка (±24px, итого 48×48), справа обрезан началом текста задачи
+function inFailZone(e, el) {
+  const c = el.querySelector(".chk").getBoundingClientRect(), t = el.querySelector(".title").getBoundingClientRect();
+  const cx = c.left + c.width / 2, cy = c.top + c.height / 2;
+  return e.clientX >= cx - 24 && e.clientX < Math.min(cx + 24, t.left) && Math.abs(e.clientY - cy) <= 24;
+}
 function lpCancel() { if (!lp) return; clearTimeout(lp.t); lp.el?.classList.remove("holding"); lp = null; }
 document.addEventListener("pointerdown", e => {
   lpFired = null;
