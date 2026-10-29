@@ -12,7 +12,7 @@
 <script>try{var t=localStorage.getItem("takt-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <script>
 // автообновление: iPhone держит старую страницу в кэше — сверяем версию и открываем свежую
-var APP_V = "48";
+var APP_V = "49";
 function checkUpdate() {
   fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d.v || d.v === APP_V) return;
@@ -323,11 +323,23 @@ h1{margin:0;font-size:40px;line-height:1.05;font-weight:600;letter-spacing:-.025
 .drag-badge b{position:absolute;right:0;bottom:0;min-width:26px;height:26px;padding:0 7px;border-radius:13px;background:var(--accent);color:var(--on-accent);font:600 13px/26px var(--mono);text-align:center;box-shadow:var(--badge-shadow)}
 .task.drop-before{box-shadow:inset 0 3px 0 var(--accent),var(--shadow)}
 .task.drop-after{box-shadow:inset 0 -3px 0 var(--accent),var(--shadow)}
-.chk{width:26px;height:26px;border-radius:50%;background:var(--check-empty);display:grid;place-items:center;margin-top:-1px;transition:background .15s,transform .15s}
+.chk{position:relative;width:26px;height:26px;border-radius:50%;background:var(--check-empty);display:grid;place-items:center;margin-top:-1px;transition:background .15s,transform .15s}
+.chk::after{content:"";position:absolute;inset:-11px}
+.day .chk::after{inset:-14px}
+.chk::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--todo);transform:scale(0);pointer-events:none}
 .chk:hover{background:var(--accent-soft);transform:scale(1.06)}
-.chk svg{opacity:0}
+.chk svg{position:relative;grid-area:1/1;opacity:0}
 .task.done .chk{background:var(--check)}
-.task.done .chk svg{opacity:1}
+.task.done .chk svg.ck{opacity:1}
+.task.failed .chk{background:var(--todo)}
+.task.failed .chk svg.ck{opacity:0}
+.task.failed .chk svg.cx{opacity:1}
+.task.failed .chk svg.cx path{stroke:#fff}
+.task.holding .chk::before{transform:scale(1);transition:transform .38s linear .12s}
+.task.holding .chk svg.cx{opacity:1;transition:opacity .38s linear .12s}
+.task.holding .chk svg.cx path{stroke:#fff}
+.task.holding .chk svg.ck{opacity:0}
+.nf{color:var(--todo)}
 .title{overflow-wrap:anywhere;padding-top:2px}
 .task.prio .title{font-size:17.5px;font-weight:650;letter-spacing:-.01em;padding-top:0}
 .task.done .title{color:var(--done);text-decoration:line-through;text-decoration-color:var(--mute);font-weight:400;font-size:15px}
@@ -353,7 +365,8 @@ h1{margin:0;font-size:40px;line-height:1.05;font-weight:600;letter-spacing:-.025
 .day.today{background:var(--accent-soft)}
 .day-h{display:flex;justify-content:space-between;align-items:baseline;padding:4px 6px 10px;cursor:pointer}
 .day-h b{font-weight:600;text-transform:capitalize}
-.day-h span{font:13px var(--mono);color:var(--mute)}
+.day-h span{font:13px var(--mono);color:var(--mute);white-space:nowrap}
+.day-h .dsum{font-size:11px;margin-right:7px;letter-spacing:-.02em}
 .day.today .day-h span{color:var(--accent)}
 .day .task{grid-template-columns:20px minmax(0,1fr);gap:8px;padding:8px 9px;font-size:13px;border-radius:11px}
 .day .chk{width:20px;height:20px}
@@ -1100,7 +1113,7 @@ button.q-pick.studied:hover{background:var(--accent);color:var(--on-accent)}
 <div class="drag-badge" id="dragBadge" aria-hidden="true"><b>1</b></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="sync.js?v=5"></script>
+<script src="sync.js?v=6"></script>
 <script>
 const LS = "takt-mock-v1";
 const pad = n => String(n).padStart(2, "0");
@@ -1124,6 +1137,7 @@ const isMobile = () => MQ.matches;
 const uid = () => Math.random().toString(36).slice(2, 10);
 const WD = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 const CHECK = '<svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 6.8l2.6 2.6 5.4-5.8" fill="none" stroke="#1D1729" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const CROSS = '<svg width="13" height="13" viewBox="0 0 13 13"><path d="M3.4 3.4l6.2 6.2M9.6 3.4l-6.2 6.2" fill="none" stroke="#1D1729" stroke-width="1.9" stroke-linecap="round"/></svg>';
 const CHECK_W = CHECK.replace("#1D1729", "#fff");
 const SUN = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10" cy="10" r="3.6"/><path d="M10 1.8v2M10 16.2v2M1.8 10h2M16.2 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg>';
 const MOON = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M16.5 12.4A7 7 0 0 1 7.6 3.5a7 7 0 1 0 8.9 8.9z"/></svg>';
@@ -1219,21 +1233,31 @@ const sideCal = picker($("sideCal"), {
 function taskHTML(x, compact) {
   const time = x.time ? `<span class="time">${x.time}</span>` : "";
   const drag = !x.done && !isMobile() ? ` draggable="true"${x.time ? "" : " data-free"}` : "";
-  return `<div class="task${x.done ? " done" : ""}${x.prio ? " prio" : ""}" data-id="${x.id}"${drag}>
-    <button class="chk" data-act="toggle" aria-label="${x.done ? "Вернуть" : "Выполнено"}">${CHECK}</button>
+  const bad = x.done && x.failed;
+  return `<div class="task${x.done ? " done" : ""}${bad ? " failed" : ""}${x.prio ? " prio" : ""}" data-id="${x.id}"${drag}>
+    <button class="chk" data-act="toggle" aria-label="${x.done ? "Вернуть" : "Выполнено"}">${CHECK.replace("<svg", '<svg class="ck"')}${CROSS.replace("<svg", '<svg class="cx"')}</button>
     <div class="title">${esc(x.title)}</div>
     ${compact ? (time ? `<div class="meta">${time}</div>` : "") : `<div class="meta">${time}<button class="pbtn" data-act="prio" title="${x.prio ? "Снять приоритет" : "Сделать приоритетной"}">${FLAG}</button></div>`}
   </div>`;
 }
 
+// ✓ — сделано, ✗ — отмечено «не выполнено»; оба закрыты, но в проценте считается только ✓
+const tally = list => { const bad = list.filter(x => x.done && x.failed).length; return { ok: list.filter(x => x.done).length - bad, bad }; };
+const tallyHTML = (ok, bad) => `${ok} ✓ · <span class="nf">${bad} ✗</span>`;
+const doneHead = d => { const { ok, bad } = tally(d); return bad ? tallyHTML(ok, bad) : d.length; };
+const daySum = d => {
+  const { ok, bad } = tally(doneOn(d));
+  return ok || bad ? `<em class="dsum" style="font-style:normal">${ok ? ok + "✓" : ""}${ok && bad ? " " : ""}${bad ? `<span class="nf">${bad}✗</span>` : ""}</em>` : "";
+};
 function progress(list) {
-  const dn = list.filter(x => x.done).length;
-  const pct = list.length ? Math.round(dn / list.length * 100) : 0;
+  const { ok, bad } = tally(list);
+  const pct = list.length ? Math.round(ok / list.length * 100) : 0;
+  const head = bad ? `${tallyHTML(ok, bad)} из ${list.length}` : `${ok} из ${list.length}`;
   $("barFill").style.width = pct + "%";
   $("pct").textContent = list.length ? pct + "%" : "";
-  $("prog").textContent = list.length ? `${dn} из ${list.length}` : "пусто";
+  $("prog").innerHTML = list.length ? head : "пусто";
   $("mLine").style.width = pct + "%";
-  $("mProg").innerHTML = list.length ? `${dn} из ${list.length} · <b>${pct}%</b>` : "пусто";
+  $("mProg").innerHTML = list.length ? `${head} · <b>${pct}%</b>` : "пусто";
 }
 
 function render() {
@@ -1271,7 +1295,7 @@ function render() {
     } else
     $("board").innerHTML = `<div class="cols">
       <div class="col"><h2>Осталось <span>${a.length}</span></h2><div class="list" data-list="${view.date}">${a.map(x => taskHTML(x)).join("") || `<div class="empty">${view.date === INBOX ? "Входящие пусты — всё разобрано." : view.date === SOMEDAY ? "Здесь пока ничего не отложено." : "На этот день задач нет — добавь внизу."}</div>`}</div></div>
-      <div class="col"><h2>Сделано <span>${d.length}</span></h2><div class="list">${d.map(x => taskHTML(x)).join("") || '<div class="empty">Пока ничего.</div>'}</div></div>
+      <div class="col"><h2>Сделано <span>${doneHead(d)}</span></h2><div class="list">${d.map(x => taskHTML(x)).join("") || '<div class="empty">Пока ничего.</div>'}</div></div>
     </div>`;
   } else {
     const s = weekStart(view.date), e = addDays(s, 6);
@@ -1283,7 +1307,7 @@ function render() {
     $("board").innerHTML = `<div class="week">${days.map(d => {
       const p = parse(d);
       return `<div class="day${d === TODAY ? " today" : ""}">
-        <div class="day-h" data-open="${d}"><b>${p.toLocaleDateString("ru-RU", { weekday: "short" })}</b><span>${p.getDate()}</span></div>
+        <div class="day-h" data-open="${d}"><b>${p.toLocaleDateString("ru-RU", { weekday: "short" })}</b><span>${daySum(d)}${p.getDate()}</span></div>
         <div class="day-add"><input data-add-date="${d}" placeholder="+ Добавить" autocomplete="off" enterkeyhint="done"></div>
         <div class="list" data-list="${d}">${[...active(d), ...doneOn(d)].map(x => taskHTML(x, true)).join("")}</div>
       </div>`;
@@ -1342,7 +1366,7 @@ $("addBtn").onclick = () => openCard(null);
 /* ---------- клики по доске ---------- */
 document.addEventListener("click", e => {
   const t = e.target;
-  if (lpFired) { lpFired = false; if (t.closest(".task")) return; }
+  if (lpFired) { const k = lpFired; lpFired = null; if (k === "fail" || t.closest(".task")) return; }
   const navB = t.closest("[data-mode]");
   if (navB) return go(navB.dataset.mode, navB.dataset.date);
   const openB = t.closest("[data-open]");
@@ -1360,13 +1384,23 @@ document.addEventListener("click", e => {
 });
 
 function toggleTask(x) {
-  x.done = !x.done; x.doneAt = x.done ? new Date().toISOString() : null;
+  x.done = !x.done; x.doneAt = x.done ? new Date().toISOString() : null; x.failed = false;
   if (x.done) focusTaskDone(x);
   save(); render();
   if (x.date === INBOX) {
     if (x.done) toastUndo("В архиве", () => { x.done = false; x.doneAt = null; save(); render(); });
     else if (view.date === ARCHIVE) toast("Вернул во входящие");
   }
+}
+// ✗ «не выполнено»: ставит статус, а не переключает — повторный вызов (таймер и contextmenu разом) ничего не меняет
+function markFailed(x) {
+  if (!x || (x.done && x.failed)) return false;
+  const prev = { done: x.done, failed: !!x.failed, doneAt: x.doneAt };
+  x.done = true; x.failed = true; x.doneAt = new Date().toISOString();
+  focusTaskDone(x);
+  save(); render();
+  toastUndo(x.date === INBOX ? "Не выполнено, в архиве" : "Не выполнено", () => { Object.assign(x, prev); save(); render(); });
+  return true;
 }
 
 /* ---------- выбор периода ---------- */
@@ -1634,19 +1668,40 @@ function moveTask(x, to) {
 }
 
 /* ---------- долгое нажатие на телефоне: куда перенести ---------- */
-let lp = null, lpFired = false, moveId = null;
+let lp = null, lpFired = null, moveId = null; // lpFired: "move" — открыт лист переноса, "fail" — поставлен ✗; глотает следующий click
+const HOLD_MOVE = 450, HOLD_FAIL = 500;
+// зона отметки: на телефоне левые 72px строки, на компьютере кружок с запасом до 48px (запас — псевдоэлемент .chk::after)
+const inFailZone = (e, el) => isMobile() ? e.clientX - el.getBoundingClientRect().left < 72 : !!e.target.closest(".chk");
+function lpCancel() { if (!lp) return; clearTimeout(lp.t); lp.el?.classList.remove("holding"); lp = null; }
 document.addEventListener("pointerdown", e => {
-  if (!isMobile()) return;
+  lpFired = null;
+  lpCancel();
+  if (e.button !== 0) return;
   const el = e.target.closest(".task");
-  if (!el || e.target.closest(".chk") || e.clientX - el.getBoundingClientRect().left < 72) return;
-  const x = tasks.find(k => k.id === el.dataset.id);
-  if (!x || x.done) return;
-  clearTimeout(lp?.t);
-  lp = { sx: e.clientX, sy: e.clientY, t: setTimeout(() => { lp = null; lpFired = true; navigator.vibrate?.(12); openMove(x.id); }, 450) };
+  const x = el && tasks.find(k => k.id === el.dataset.id);
+  if (!x) return;
+  if (inFailZone(e, el)) {
+    el.classList.add("holding");
+    lp = { sx: e.clientX, sy: e.clientY, el, t: setTimeout(() => {
+      el.classList.remove("holding"); lp = null; lpFired = "fail";
+      if (markFailed(x)) navigator.vibrate?.(25);
+    }, HOLD_FAIL) };
+    return;
+  }
+  if (!isMobile() || x.done) return;
+  lp = { sx: e.clientX, sy: e.clientY, t: setTimeout(() => { lp = null; lpFired = "move"; navigator.vibrate?.(12); openMove(x.id); }, HOLD_MOVE) };
 });
-document.addEventListener("pointermove", e => { if (lp && Math.hypot(e.clientX - lp.sx, e.clientY - lp.sy) > 8) { clearTimeout(lp.t); lp = null; } });
-["pointerup", "pointercancel"].forEach(ev => document.addEventListener(ev, () => { if (lp) { clearTimeout(lp.t); lp = null; } }));
-document.addEventListener("contextmenu", e => { if (isMobile() && e.target.closest(".task")) e.preventDefault(); });
+document.addEventListener("pointermove", e => { if (lp && Math.hypot(e.clientX - lp.sx, e.clientY - lp.sy) > 8) lpCancel(); });
+["pointerup", "pointercancel"].forEach(ev => document.addEventListener(ev, lpCancel));
+document.addEventListener("contextmenu", e => {
+  const el = e.target.closest(".task");
+  if (!el) return;
+  if (inFailZone(e, el)) {
+    e.preventDefault();
+    lpCancel(); lpFired = "fail";
+    markFailed(tasks.find(k => k.id === el.dataset.id));
+  } else if (isMobile()) e.preventDefault();
+});
 
 function openMove(id) {
   moveId = id;

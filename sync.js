@@ -105,11 +105,11 @@ function makeSync(o) {
 
 const taskSync = makeSync({
   table: "tasks", ls: "takt-sync-v1",
-  fields: ["title", "date", "time", "prio", "done", "doneAt", "pos", "carry", "note"],
+  fields: ["title", "date", "time", "prio", "done", "doneAt", "pos", "carry", "note", "failed"],
   list: () => tasks,
-  toRow: t => ({ title: t.title, date: t.date, time: t.time || "", prio: !!t.prio, done: !!t.done, done_at: t.doneAt || null, pos: t.pos | 0, carry: t.carry | 0, note: t.note || "" }),
-  deadRow: { title: "", date: "inbox", time: "", prio: false, done: false, done_at: null, pos: 0, carry: 0, note: "" },
-  fromRow: r => ({ title: r.title, date: r.date, time: r.time || "", prio: r.prio, done: r.done, doneAt: r.done_at, pos: r.pos, carry: r.carry, note: r.note || "" }),
+  toRow: t => ({ title: t.title, date: t.date, time: t.time || "", prio: !!t.prio, done: !!t.done, done_at: t.doneAt || null, pos: t.pos | 0, carry: t.carry | 0, note: t.note || "", failed: !!t.failed }),
+  deadRow: { title: "", date: "inbox", time: "", prio: false, done: false, done_at: null, pos: 0, carry: 0, note: "", failed: false },
+  fromRow: r => ({ title: r.title, date: r.date, time: r.time || "", prio: r.prio, done: r.done, doneAt: r.done_at, pos: r.pos, carry: r.carry, note: r.note || "", failed: !!(r.done && r.failed) }),
   changed: () => { save(); render(); },
   afterFull: () => { if (window.purgeArchive?.()) render(); }, // очистка архива — только после полной сверки с облаком
 });
