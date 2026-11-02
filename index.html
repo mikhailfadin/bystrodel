@@ -1181,7 +1181,7 @@ function hyphPoints(w, lat) {
   const units = [];
   for (let i = 0; i < L.length; i++) {
     let u = L[i];
-    if (lat) { const d = L.slice(i, i + 2); if (/^(ch|sh|th|ph|wh|gh|ck|ng|qu)$/.test(d)) { u = d; i++; } }
+    if (lat) { const d = L.slice(i, i + 2); if (/^(ch|sh|th|ph|wh|gh|ck|qu)$/.test(d)) { u = d; i++; } }
     else while (i + 1 < L.length && (L[i + 1] === "ь" || L[i + 1] === "ъ")) u += L[++i];
     units.push(u);
   }
@@ -1190,7 +1190,7 @@ function hyphPoints(w, lat) {
   units.forEach((u, k) => { if (isV(u, k) && !(lat && nuclei.length && nuclei[nuclei.length - 1].end === k - 1)) nuclei.push({ start: k, end: k }); else if (isV(u, k) && lat) nuclei[nuclei.length - 1].end = k; });
   const lens = units.map(u => u.length), pre = [0];
   lens.forEach(n => pre.push(pre[pre.length - 1] + n));
-  const minL = lat ? 3 : 2, minR = lat ? 3 : 2, out = [];
+  const minL = 2, minR = 2, out = [];
   for (let n = 0; n + 1 < nuclei.length; n++) {
     const a = nuclei[n].end + 1, b = nuclei[n + 1].start, g = units.slice(a, b);
     if (!g.length) continue;
@@ -1203,11 +1203,12 @@ function hyphPoints(w, lat) {
   }
   return out;
 }
-function hyph(word) {
+function hyph1(word) {
   if (word.length < 5 || word === word.toUpperCase()) return word;
   const pts = hyphPoints(word, /^[A-Za-z]+$/.test(word));
   return pts.reduce((r, p, i) => r + (i ? word.slice(pts[i - 1], p) : word.slice(0, p)) + SHY, "") + word.slice(pts.length ? pts[pts.length - 1] : 0);
 }
+const hyph = word => word.split(/(?<=[a-z])(?=[A-Z])/).map(hyph1).join(SHY);
 const escHyph = s => s.split(/([A-Za-zА-Яа-яЁё]{5,})/).map((t, i) => i % 2 ? hyph(t) : esc(t)).join("");
 const onDate = d => tasks.filter(x => x.date === d);
 // приоритетные сверху; затем задачи со временем — строго по времени; затем без времени — в ручном порядке
